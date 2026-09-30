@@ -1,0 +1,10 @@
+.bak/
+out/
+build/
+node_modules/
+relay/.sessions/
+*.rbxl
+*.rbxlx
+*.rbxm
+!samples/*.rbxm
+__pycache__/
