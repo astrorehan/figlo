@@ -152,6 +152,19 @@ function buildFxList(spec) {
     head.append(chip, hint);
     const params = document.createElement('div');
     params.className = 'params';
+    if (def.value) {
+      const row = document.createElement('div');
+      row.className = 'param';
+      const label = document.createElement('label');
+      label.textContent = def.value;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'none';
+      input.dataset.value = '1';
+      input.onchange = () => send({ type: 'fx-value', tag, value: input.value.trim() });
+      row.append(label, input);
+      params.append(row);
+    }
     for (const [key, p] of Object.entries(def.params)) {
       const row = document.createElement('div');
       row.className = 'param';
@@ -178,11 +191,13 @@ function buildFxList(spec) {
       }
       params.append(row);
     }
-    const reset = document.createElement('button');
-    reset.className = 'reset';
-    reset.textContent = 'Reset to defaults';
-    reset.onclick = () => send({ type: 'fx-reset', tag });
-    params.append(reset);
+    if (Object.keys(def.params).length) {
+      const reset = document.createElement('button');
+      reset.className = 'reset';
+      reset.textContent = 'Reset to defaults';
+      reset.onclick = () => send({ type: 'fx-reset', tag });
+      params.append(reset);
+    }
     box.append(head, params);
     list.append(box);
   }
@@ -199,7 +214,7 @@ function showFxState(m) {
     box.querySelector('.chip').disabled = m.count === 0;
     if (!st) continue;
     for (const input of box.querySelectorAll('input')) {
-      const v = st.values[input.dataset.key];
+      const v = input.dataset.value ? (st.value || '') : st.values[input.dataset.key];
       if (document.activeElement !== input) input.value = v;
     }
   }

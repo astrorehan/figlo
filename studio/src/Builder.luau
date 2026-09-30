@@ -308,6 +308,80 @@ local function lookupImage(n: any, opts: Options): string?
 	return id
 end
 
+-- `_ratio`: the layer keeps its Figma shape on any screen.
+local function keepRatio(inst: GuiObject, n: any)
+	if n.tags and n.tags.ratio and n.ph > 0 then
+		local c = Instance.new("UIAspectRatioConstraint")
+		c.AspectRatio = n.pw / n.ph
+		c.Parent = inst
+	end
+end
+
+local ALIGN_H = { MIN = Enum.HorizontalAlignment.Left, CENTER = Enum.HorizontalAlignment.Center, MAX = Enum.HorizontalAlignment.Right }
+local ALIGN_V = { MIN = Enum.VerticalAlignment.Top, CENTER = Enum.VerticalAlignment.Center, MAX = Enum.VerticalAlignment.Bottom }
+
+-- `_stack` / `_tiles`: Roblox lays the children out, so rows added by code line up.
+-- Layouts place children by their top-left corner (AnchorPoint is ignored) and
+-- resolve child Scale sizes and gaps against the box inside the padding, so every
+-- child size is converted from "share of the frame" to "share of the content box".
+local function applyLayout(holder: GuiObject, n: any, children: { GuiObject })
+	local L = n.layout
+	local pl, pt, pr, pb = L.pad[1], L.pad[2], L.pad[3], L.pad[4]
+	local cw, ch = math.max(1, n.pw - pl - pr), math.max(1, n.ph - pt - pb)
+	if pl + pt + pr + pb > 0 then
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(pl / n.pw, 0)
+		pad.PaddingRight = UDim.new(pr / n.pw, 0)
+		pad.PaddingTop = UDim.new(pt / n.ph, 0)
+		pad.PaddingBottom = UDim.new(pb / n.ph, 0)
+		pad.Parent = holder
+	end
+	local kx, ky = n.pw / cw, n.ph / ch
+	for i, c in children do
+		c.LayoutOrder = i
+		c.Size = UDim2.fromScale(c.Size.X.Scale * kx, c.Size.Y.Scale * ky)
+		local base = c:GetAttribute("FF_BaseSize")
+		if typeof(base) == "UDim2" then
+			c:SetAttribute("FF_BaseSize", UDim2.fromScale(base.X.Scale * kx, base.Y.Scale * ky))
+		end
+	end
+	local horizontal = L.dir == "HORIZONTAL"
+	local mainH = if horizontal then L.main else L.cross
+	local mainV = if horizontal then L.cross else L.main
+	if n.tags.tiles and children[1] then
+		local grid = Instance.new("UIGridLayout")
+		grid.SortOrder = Enum.SortOrder.LayoutOrder
+		grid.FillDirection = if horizontal then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
+		grid.CellSize = children[1].Size
+		local gx = if horizontal then L.gap else L.gapCross
+		local gy = if horizontal then L.gapCross else L.gap
+		grid.CellPadding = UDim2.fromScale(gx / cw, gy / ch)
+		grid.HorizontalAlignment = ALIGN_H[mainH] or Enum.HorizontalAlignment.Left
+		grid.VerticalAlignment = ALIGN_V[mainV] or Enum.VerticalAlignment.Top
+		grid.Parent = holder
+	else
+		local list = Instance.new("UIListLayout")
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.FillDirection = if horizontal then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
+		list.Padding = UDim.new(L.gap / (if horizontal then cw else ch), 0)
+		if L.wrap then
+			list.Wraps = true
+		end
+		list.HorizontalAlignment = ALIGN_H[mainH] or Enum.HorizontalAlignment.Left
+		list.VerticalAlignment = ALIGN_V[mainV] or Enum.VerticalAlignment.Top
+		if L.main == "SPACE_BETWEEN" then
+			pcall(function()
+				if horizontal then
+					list.HorizontalFlex = Enum.UIFlexAlignment.SpaceBetween
+				else
+					list.VerticalFlex = Enum.UIFlexAlignment.SpaceBetween
+				end
+			end)
+		end
+		list.Parent = holder
+	end
+end
+
 local function buildNode(n: any, parent: any, z: number, opts: Options, warnings: { string }): { GuiObject }
 	local opacity = n.opacity or 1
 
@@ -349,6 +423,7 @@ local function buildNode(n: any, parent: any, z: number, opts: Options, warnings
 		if n.button then
 			inst.AutoButtonColor = false
 		end
+		keepRatio(inst, n)
 		return { inst }
 	end
 
@@ -374,7 +449,10 @@ local function buildNode(n: any, parent: any, z: number, opts: Options, warnings
 		inst = Instance.new("TextButton")
 		inst.Text = ""
 		inst.AutoButtonColor = false
-	elseif opacity < 1 and n.children and #n.children > 0 then
+		if n.tags and n.tags.group then
+			table.insert(warnings, n.name .. ": _group is ignored on a button (a CanvasGroup cannot be clicked)")
+		end
+	elseif (n.tags and n.tags.group) or (opacity < 1 and n.children and #n.children > 0) then
 		inst = Instance.new("CanvasGroup")
 		inst.GroupTransparency = 1 - opacity
 		opacity = 1
@@ -386,12 +464,13 @@ local function buildNode(n: any, parent: any, z: number, opts: Options, warnings
 	if n.radius then
 		corner(inst, n.radius, n.pw, n.ph)
 	end
+	keepRatio(inst, n)
 	-- Figma paints a frame's stroke above its children; Roblox paints it with the
 	-- frame, under them. A full-size child (a buy button's Background) hid every
 	-- inside stroke, so a frame with children gets the stroke on a top overlay.
 	local strokeHost: Frame? = nil
 	if n.stroke then
-		if n.children and #n.children > 0 and n.stroke.align ~= "OUTSIDE" and n.kind ~= "canvas" then
+		if n.children and #n.children > 0 and n.stroke.align ~= "OUTSIDE" and n.kind ~= "canvas" and not n.layout then
 			local host = Instance.new("Frame")
 			host.Name = n.name .. "Stroke"
 			host.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -410,14 +489,33 @@ local function buildNode(n: any, parent: any, z: number, opts: Options, warnings
 		end
 	end
 	local childZ = 0
+	local kids: { GuiObject } = {}
 	if n.children then
 		for _, child in n.children do
 			for _, built in buildNode(child, n, childZ + 1, opts, warnings) do
 				childZ += 1
 				built.ZIndex = childZ
 				built.Parent = inst
+				table.insert(kids, built)
 			end
 		end
+	end
+	if n.layout then
+		-- A clipping frame keeps its children one level down, in <name>Clip.
+		local holder: GuiObject = inst
+		if #kids == 1 and kids[1]:GetAttribute("FF_Id") == n.id .. ":clip" then
+			holder = kids[1]
+			kids = {}
+			for _, c in holder:GetChildren() do
+				if c:IsA("GuiObject") then
+					table.insert(kids, c)
+				end
+			end
+			table.sort(kids, function(a, b)
+				return a.ZIndex < b.ZIndex
+			end)
+		end
+		applyLayout(holder, n, kids)
 	end
 	if strokeHost then
 		strokeHost.ZIndex = childZ + 1

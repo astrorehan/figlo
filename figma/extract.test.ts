@@ -15,7 +15,7 @@ describe("parseName", () => {
     expect(m.name).toBe("Badge");
     expect(m.tags.pulse).toBe(true);
     expect(m.bake).toBe(true);
-    expect(parseName("Shop_tab:Cash").tags.tab).toBe("Cash");
+    expect(parseName("Shop_goto:Cash").tags.goto).toBe("Cash");
   });
 
   test("reports a suffix that looks like a mistyped tag", () => {
@@ -37,6 +37,20 @@ describe("parseName", () => {
     const m = parseName("Icon_nodim");
     expect(m.name).toBe("Icon");
     expect(m.tags.nodim).toBe(true);
+  });
+
+  test("navigation tags make a button", () => {
+    for (const tag of ["goto:Cash", "show:Shop", "hide", "switch:Menu"]) {
+      expect(parseName("Tab_" + tag).tags.button).toBe(true);
+    }
+    expect(parseName("HoverLook_when:hover|press").tags.when).toBe("hover|press");
+    expect(parseName("Icon_sway").tags.button).toBeUndefined();
+  });
+
+  test("retired names warn instead of being dropped silently", () => {
+    for (const old of ["jelly", "glint", "cascade", "tab", "close"]) {
+      expect(parseName("Layer_" + old).unknown).toBe(old);
+    }
   });
 
   test("every tunable effect is a known tag", () => {

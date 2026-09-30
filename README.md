@@ -91,6 +91,10 @@ Studio caches `require` results. After replacing the modules' `Source`, require 
   ScreenGui (a button template cloned by your code), including the object itself.
 - `Runtime.apply(container)`: fit text once (useful in Edit mode, where no scripts run).
 - `Runtime.setFxScale(object, k, channel)`: contribute to an object's single `UIScale`.
+- `Runtime.setFxOffset(object, x, y, channel)` / `Runtime.setFxRotation(object, degrees, channel)`:
+  the same for position (parent Scale units) and rotation.
+- Attributes your code can set: `FF_Locked` on a button (locks it), `FF_Active` (marks it
+  active for `_when:active`). `_goto` sets `FF_Page` on the ScreenGui.
 
 ## Development
 

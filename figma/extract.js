@@ -4,20 +4,24 @@
 
 const FF_IR_VERSION = 1;
 
-// Name suffixes we understand. `_a_b` → tags {a, b}; `_tab:Shop` → {tab: "Shop"}.
+// Name suffixes we understand. `_a_b` → tags {a, b}; `_goto:Shop` → {goto: "Shop"}.
 const KNOWN_TAGS = new Set([
   // structure
-  'image', 'img', 'lock', 'frame', 'txt', 'keep', 'ignore', 'scroll', 'list', 'grid', 'aspect', 'fit', 'canvas', 'nodim',
-  // buttons and states
-  'button', 'smooth', 'up', 'magnet', 'select', '3d', 'tilt', 'hover', 'clicked', 'default', 'disabled', 'active',
-  'tab', 'open', 'toggle', 'close', 'panel',
+  'image', 'img', 'lock', 'frame', 'txt', 'keep', 'ignore', 'scroll', 'nodim', 'ratio', 'group', 'stack', 'tiles',
+  // buttons, button states and navigation
+  'button', 'smooth', 'when', 'goto', 'show', 'hide', 'switch',
   // idle motion
-  'spin', 'drift', 'float', 'lean', 'jelly', 'wiggle', 'shake', 'pulse', 'rays',
+  'spin', 'drift', 'float', 'wiggle', 'pulse', 'rays', 'blink', 'sway', 'wobble', 'jitter', 'halo', 'tide',
+  // pointer
+  'lift', 'tip', 'pull', 'sheen', 'splash',
   // entrances
-  'pop', 'reveal', 'swing', 'drop', 'cascade', 'fadein', 'blink',
-  // visual
-  'shiny', 'glint', 'glow', 'gleam', 'flow', 'shadow',
+  'pop', 'fade', 'slide', 'stagger',
+  // light
+  'shiny', 'gleam',
 ]);
+
+// Tags that make a layer clickable.
+const BUTTON_TAGS = ['smooth', 'goto', 'show', 'hide', 'switch'];
 
 // Tunable effects. The plugin's Effects tab edits these per layer and stores them with
 // setPluginData('fx', JSON); anything not set falls back to `def`.
@@ -79,6 +83,79 @@ const EFFECTS = {
     from: { label: 'Start scale', def: 0.8, min: 0, max: 1, step: 0.01 },
     time: { label: 'Time (s)', def: 0.3, min: 0.05, max: 2, step: 0.01 },
   } },
+  sway: { hint: 'Rocks gently from side to side forever, like a hanging sign.', params: {
+    angle: { label: 'Angle (deg)', def: 6, min: 0, max: 45, step: 1 },
+    rate: { label: 'Swings per second', def: 0.4, min: 0.05, max: 4, step: 0.05 },
+  } },
+  wobble: { hint: 'Squashes and stretches forever, like jelly (frames and images).', params: {
+    amp: { label: 'Stretch', def: 0.05, min: 0, max: 0.3, step: 0.01 },
+    rate: { label: 'Wobbles per second', def: 1.2, min: 0.05, max: 4, step: 0.05 },
+  } },
+  jitter: { hint: 'Every few seconds, a short shiver in place.', params: {
+    every: { label: 'Every (s)', def: 3, min: 0.3, max: 20, step: 0.1 },
+    time: { label: 'Shiver time (s)', def: 0.35, min: 0.05, max: 3, step: 0.05 },
+    amount: { label: 'Distance (share of own height)', def: 0.04, min: 0, max: 0.5, step: 0.01 },
+  } },
+  halo: { hint: 'A soft outline that brightens and dims forever (the text outline on text layers).', params: {
+    color: { label: 'Colour (hex)', def: 'FFFFFF', type: 'text' },
+    size: { label: 'Thickness (px)', def: 6, min: 1, max: 40, step: 1 },
+    rate: { label: 'Beats per second', def: 0.8, min: 0.05, max: 4, step: 0.05 },
+    low: { label: 'Dimmest', def: 0.15, min: 0, max: 1, step: 0.05 },
+    high: { label: 'Brightest', def: 0.7, min: 0, max: 1, step: 0.05 },
+  } },
+  tide: { hint: "Slides the layer's gradient fill back and forth (and turns it, if set).", params: {
+    amp: { label: 'Slide', def: 0.3, min: 0, max: 1, step: 0.01 },
+    rate: { label: 'Slides per second', def: 0.25, min: 0.02, max: 4, step: 0.01 },
+    turn: { label: 'Turn (deg/s)', def: 0, min: -360, max: 360, step: 1 },
+  } },
+  lift: { hint: 'Rises a little while the pointer is over it (or over its button).', params: {
+    amount: { label: 'Height (share of own height)', def: 0.08, min: 0, max: 1, step: 0.01 },
+    time: { label: 'Ease time (s)', def: 0.15, min: 0.02, max: 1, step: 0.01 },
+  } },
+  tip: { hint: 'Leans toward the pointer while hovered.', params: {
+    angle: { label: 'Angle (deg)', def: 6, min: 0, max: 45, step: 1 },
+    time: { label: 'Ease time (s)', def: 0.15, min: 0.02, max: 1, step: 0.01 },
+  } },
+  pull: { hint: 'Follows the pointer a little while hovered.', params: {
+    strength: { label: 'Strength', def: 0.12, min: 0, max: 1, step: 0.01 },
+    time: { label: 'Ease time (s)', def: 0.12, min: 0.02, max: 1, step: 0.01 },
+  } },
+  sheen: { hint: 'One light sweep across the shape each time the pointer enters.', params: {
+    time: { label: 'Sweep time (s)', def: 0.5, min: 0.1, max: 3, step: 0.05 },
+    width: { label: 'Band width', def: 0.3, min: 0.05, max: 1, step: 0.01 },
+    opacity: { label: 'Brightness', def: 0.6, min: 0.05, max: 1, step: 0.05 },
+    angle: { label: 'Tilt (deg)', def: 20, min: -60, max: 60, step: 1 },
+  } },
+  splash: { hint: 'A circle spreads from where the button is pressed.', params: {
+    color: { label: 'Colour (hex)', def: 'FFFFFF', type: 'text' },
+    opacity: { label: 'Opacity', def: 0.35, min: 0.05, max: 1, step: 0.05 },
+    time: { label: 'Time (s)', def: 0.45, min: 0.1, max: 2, step: 0.05 },
+  } },
+  fade: { hint: 'Fades in whenever it becomes visible.', params: {
+    time: { label: 'Time (s)', def: 0.35, min: 0.05, max: 3, step: 0.05 },
+  } },
+  slide: { hint: 'Slides into place whenever it becomes visible.', params: {
+    distance: { label: 'Distance (share of parent)', def: 0.25, min: 0, max: 2, step: 0.01 },
+    angle: { label: 'Comes from (0 = above, 90 = right)', def: 180, min: 0, max: 359, step: 1 },
+    time: { label: 'Time (s)', def: 0.4, min: 0.05, max: 3, step: 0.05 },
+  } },
+  stagger: { hint: 'Its children pop in one after another whenever it becomes visible.', params: {
+    gap: { label: 'Delay between (s)', def: 0.06, min: 0, max: 1, step: 0.01 },
+    from: { label: 'Start scale', def: 0, min: 0, max: 1, step: 0.01 },
+    time: { label: 'Time each (s)', def: 0.25, min: 0.05, max: 2, step: 0.01 },
+  } },
+  // Tags whose value lives in the name (`_goto:Shop`); the plugin edits it as text.
+  when: { hint: "Shown only in one state of the button it sits in: hover, press, rest, locked or active (several: hover|press).", value: 'State', params: {} },
+  goto: { hint: 'Button: shows the named page (or layer) and hides its sibling pages.', value: 'Page or layer', params: {} },
+  show: { hint: 'Button: shows the named layer, page or FrameFig ScreenGui.', value: 'Layer', params: {} },
+  hide: { hint: 'Button: hides the named layer; with no name, closes its ScreenGui.', value: 'Layer (optional)', params: {} },
+  switch: { hint: 'Button: shows the named layer if hidden, hides it if shown.', value: 'Layer', params: {} },
+  // Structure, no values.
+  txt: { hint: 'Text your code will change: it shrinks to stay inside its box.', params: {} },
+  ratio: { hint: 'Keeps its Figma width-to-height ratio on any screen.', params: {} },
+  group: { hint: 'Becomes a CanvasGroup, so it and its children fade as one.', params: {} },
+  stack: { hint: 'Auto-layout frame: children are laid out by Roblox, so rows your code adds line up.', params: {} },
+  tiles: { hint: 'Wrapping auto-layout frame: children sit in a grid of equal cells.', params: {} },
 };
 
 // Effect values for the tags on a node, defaults filled in.
@@ -88,7 +165,7 @@ function effectParams(n, tags) {
   const out = {};
   for (const tag of Object.keys(tags)) {
     const spec = EFFECTS[tag];
-    if (!spec) continue;
+    if (!spec || !Object.keys(spec.params).length) continue;
     const vals = {};
     for (const [k, p] of Object.entries(spec.params)) {
       const v = saved[tag] && saved[tag][k];
@@ -118,7 +195,7 @@ function parseName(raw) {
     parts.pop();
   }
   if (tags.image || tags.img || tags.lock) bake = true;
-  if (tags.smooth) tags.button = true;
+  if (BUTTON_TAGS.some(t => tags[t])) tags.button = true;
   // A short lowercase word after the last '_' reads as a tag the author meant
   // (`Rays_breath`); report it instead of silently keeping it in the name.
   let unknown = null;
@@ -306,6 +383,21 @@ function cornerOf(n) {
   if (!('cornerRadius' in n)) return { ok: true, value: 0 };
   if (typeof n.cornerRadius !== 'number') return { ok: false, why: 'mixed corner radius' };
   return { ok: true, value: n.cornerRadius };
+}
+
+// Figma auto-layout, for `_stack` / `_tiles` frames. Pixels; the builder converts.
+function layoutOf(n) {
+  if (!('layoutMode' in n) || n.layoutMode === 'NONE' || n.layoutMode === 'GRID') return null;
+  const align = v => (v === 'CENTER' || v === 'MAX' || v === 'SPACE_BETWEEN' ? v : 'MIN');
+  return {
+    dir: n.layoutMode, // HORIZONTAL | VERTICAL
+    wrap: n.layoutWrap === 'WRAP',
+    gap: typeof n.itemSpacing === 'number' ? n.itemSpacing : 0,
+    gapCross: typeof n.counterAxisSpacing === 'number' ? n.counterAxisSpacing : 0,
+    pad: [n.paddingLeft || 0, n.paddingTop || 0, n.paddingRight || 0, n.paddingBottom || 0],
+    main: align(n.primaryAxisAlignItems),
+    cross: align(n.counterAxisAlignItems),
+  };
 }
 
 function effectsOf(n) {
@@ -660,11 +752,22 @@ function extract(rootNode) {
         why = null;
       }
       if (why) return [imageNode(n, meta, parentBox, why)];
-      if (!meta.tags.button && !meta.tags.frame && !meta.tags.keep && !meta.tags.scroll && flattenable(n)) return [imageNode(n, meta, parentBox, 'vector group')];
+      const live = ['button', 'frame', 'keep', 'scroll', 'stack', 'tiles', 'group', 'stagger'].some(t => meta.tags[t]);
+      if (!live && flattenable(n)) return [imageNode(n, meta, parentBox, 'vector group')];
       const box = nodeBox(n, origin);
       const ir = base(n, meta, box, parentBox);
       ir.kind = 'frame';
       if (meta.tags.button) ir.button = true;
+      if (meta.tags.stack || meta.tags.tiles) {
+        const layout = layoutOf(n);
+        if (layout) ir.layout = layout;
+        else warnings.push(`${n.name}: _${meta.tags.stack ? 'stack' : 'tiles'} needs an auto-layout frame, ignored`);
+        for (const c of n.children) {
+          if (c.visible !== false && !c.isMask && effectsOf(c).shadows.length) {
+            warnings.push(`${n.name}: child ${c.name} has a drop shadow, which becomes an extra cell of the layout; bake it with _image`);
+          }
+        }
+      }
       const radius = n.type !== 'GROUP' && cornerOf(n).value ? n.cornerRadius : 0;
       if (n.type !== 'GROUP' && !bg) {
         const fill = solidOrGradient(n.fills).value;

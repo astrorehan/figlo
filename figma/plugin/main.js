@@ -61,8 +61,9 @@ function fxState() {
     const fx = effectParams(n, meta.tags) || {};
     for (const tag of Object.keys(EFFECTS)) {
       if (nameWithout(n.name, tag) === n.name) continue;
-      if (!tags[tag]) tags[tag] = { count: 0, values: fx[tag] || effectParams(n, { [tag]: true })[tag] };
+      if (!tags[tag]) tags[tag] = { count: 0, values: fx[tag] || (effectParams(n, { [tag]: true }) || {})[tag] || {} };
       tags[tag].count++;
+      if (typeof meta.tags[tag] === 'string') tags[tag].value = meta.tags[tag];
     }
   }
   return { type: 'fx-state', count: sel.length, name: sel.length === 1 ? sel[0].name : null, tags };
@@ -86,6 +87,20 @@ function toggleTag(tag) {
   }
 }
 
+// `_tag` or `_tag:old` in the name becomes `_tag:value` (plain `_tag` for an empty value).
+function setTagValue(tag, value) {
+  const clean = String(value).trim().replace(/_/g, ' ');
+  for (const n of figma.currentPage.selection) {
+    const parts = n.name.split('_');
+    for (let i = parts.length - 1; i > 0; i--) {
+      const key = parts[i].split(':')[0].toLowerCase();
+      if (!KNOWN_TAGS.has(key)) break;
+      if (key === tag) { parts[i] = clean ? tag + ':' + clean : tag; break; }
+    }
+    n.name = parts.join('_');
+  }
+}
+
 function setParam(tag, key, value) {
   for (const n of figma.currentPage.selection) {
     if (nameWithout(n.name, tag) === n.name) continue;
@@ -105,6 +120,7 @@ figma.ui.onmessage = async msg => {
   }
   if (msg.type === 'fx-toggle') { toggleTag(msg.tag); sendFxState(); return; }
   if (msg.type === 'fx-set') { setParam(msg.tag, msg.key, msg.value); return; }
+  if (msg.type === 'fx-value') { setTagValue(msg.tag, msg.value); sendFxState(); return; }
   if (msg.type === 'fx-reset') {
     for (const n of figma.currentPage.selection) {
       const fx = readFx(n);
