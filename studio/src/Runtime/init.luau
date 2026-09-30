@@ -45,9 +45,26 @@ function Runtime.setFxScale(obj: Instance, k: number, channel: string?)
 	applyScale(obj)
 end
 
+-- Descendants of a container, minus page Folders nested in it (each page is
+-- watched on its own, so it must not be started twice).
+function Runtime.ownDescendants(container: Instance): { Instance }
+	local list = {}
+	local function walk(obj: Instance)
+		for _, c in obj:GetChildren() do
+			if c:IsA("Folder") and c:GetAttribute("FF_Root") and c ~= container then
+				continue
+			end
+			table.insert(list, c)
+			walk(c)
+		end
+	end
+	walk(container)
+	return list
+end
+
 local function textObjects(gui: Instance): { GuiObject }
 	local list = {}
-	for _, d in gui:GetDescendants() do
+	for _, d in Runtime.ownDescendants(gui) do
 		if d:GetAttribute("FF_TextPx") and (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) then
 			table.insert(list, d :: GuiObject)
 		end
@@ -119,6 +136,13 @@ function Runtime.watch(gui: Instance)
 	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
 	refresh()
 	Effects.start(gui, Runtime)
+end
+
+-- Starts the effects of an object that lives outside its FrameFig ScreenGui (a
+-- template your code cloned), the object itself included. Text keeps the size it
+-- had when cloned; call Runtime.apply on a container for proportional text.
+function Runtime.attach(obj: Instance)
+	Effects.start(obj, Runtime)
 end
 
 return Runtime

@@ -608,7 +608,12 @@ function Effects.start(gui: Instance, runtime: any)
 			table.insert(if name == "pop" then watchers else ticks, result)
 		end
 	end
-	for _, obj in gui:GetDescendants() do
+	-- `gui` itself counts when it is a GuiObject (Runtime.attach on a cloned button).
+	local objects = runtime.ownDescendants(gui)
+	if gui:IsA("GuiObject") then
+		table.insert(objects, 1, gui)
+	end
+	for _, obj in objects do
 		if obj:IsA("GuiButton") and obj:GetAttribute("FF_button") then
 			local btn = obj :: GuiButton
 			if btn:GetAttribute("FF_smooth") then
