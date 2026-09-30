@@ -19,7 +19,7 @@ button.ClickableWhenViewportHidden = true
 
 local widget = plugin:CreateDockWidgetPluginGui(
 	"FrameFig",
-	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 300, 170, 260, 150)
+	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 300, 230, 260, 210)
 )
 widget.Title = "FrameFig"
 
@@ -64,9 +64,20 @@ importButton.BackgroundColor3 = Color3.fromRGB(0, 132, 255)
 importButton.Parent = frame
 Instance.new("UICorner").Parent = importButton
 
+local pageButton = Instance.new("TextButton")
+pageButton.LayoutOrder = 3
+pageButton.Size = UDim2.new(1, 0, 0, 28)
+pageButton.Text = "Import as page of selected ScreenGui"
+pageButton.Font = Enum.Font.GothamMedium
+pageButton.TextSize = 13
+pageButton.TextColor3 = Color3.new(1, 1, 1)
+pageButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+pageButton.Parent = frame
+Instance.new("UICorner").Parent = pageButton
+
 local status = Instance.new("TextLabel")
-status.LayoutOrder = 3
-status.Size = UDim2.new(1, 0, 0, 50)
+status.LayoutOrder = 4
+status.Size = UDim2.new(1, 0, 0, 70)
 status.BackgroundTransparency = 1
 status.Text = "Start the relay, export in Figma, paste the code."
 status.TextWrapped = true
@@ -82,9 +93,18 @@ button.Click:Connect(function()
 end)
 
 local busy = false
-local function runImport()
+local function runImport(asPage: boolean)
 	if busy or codeBox.Text:gsub("%s", "") == "" then
 		return
+	end
+	local into = nil
+	if asPage then
+		local sel = Selection:Get()[1]
+		if not (sel and sel:IsA("ScreenGui") and sel:FindFirstChild("FrameFigRuntime")) then
+			status.Text = "Select a ScreenGui made by FrameFig first."
+			return
+		end
+		into = sel
 	end
 	busy = true
 	importButton.Text = "Importing…"
@@ -92,6 +112,7 @@ local function runImport()
 	local recording = ChangeHistoryService:TryBeginRecording("FrameFig import")
 	local ok, gui, warnings = pcall(Importer.run, codeBox.Text, {
 		parent = StarterGui,
+		into = into,
 		runtime = root.Runtime,
 		client = root.Client,
 		cache = cache,
@@ -105,7 +126,7 @@ local function runImport()
 	end
 	if ok then
 		Selection:Set({ gui })
-		status.Text = ("Imported %s."):format(gui.Name)
+		status.Text = ("Imported %s."):format(gui:GetFullName())
 		if #warnings > 0 then
 			status.Text ..= (" %d warnings (see Output)."):format(#warnings)
 			for _, w in warnings do
@@ -120,9 +141,14 @@ local function runImport()
 	busy = false
 end
 
-importButton.Activated:Connect(runImport)
+importButton.Activated:Connect(function()
+	runImport(false)
+end)
+pageButton.Activated:Connect(function()
+	runImport(true)
+end)
 codeBox.FocusLost:Connect(function(enter)
 	if enter then
-		runImport()
+		runImport(false)
 	end
 end)
