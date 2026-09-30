@@ -29,7 +29,14 @@
 - Rotation sign is opposite to Roblox; mirrored transforms (det < 0) must be baked to an image.
 - `exportAsync` output = absoluteRenderBounds, clipped by masks.
 
-## Open
+## Figma images
 
-- Tile image pixel size should come from `getImageByHash().getSizeAsync()` (hardcoded 700×700 now).
-- Drop-shadow-only PNG needs a temporary clone during export.
+- `getImageByHash(h).getSizeAsync()` can fail with "Image dimensions not available" for an image
+  fill the page has not drawn yet. Calling `getBytesAsync()` first loads it; the extractor also
+  reads the size from the PNG/JPEG/GIF/WebP header as a fallback (`imageSizeFromBytes`).
+- Content below a `_scroll` frame's fold is clipped by the scroll frame and every clipping
+  ancestor, so it measures and exports as 1×1. The extractor lifts exactly those clips while it
+  measures or exports one node (`withoutFold`).
+- `node.clone()` of a node inside an instance lands on the page, not beside the original: place
+  it with `absoluteTransform`. A hug-contents auto-layout clone collapses once its children are
+  removed, so freeze `layoutMode` first.

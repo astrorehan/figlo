@@ -30,12 +30,7 @@ async function exportShadow(node, w, h) {
 }
 
 async function imageBytes(key, info) {
-  if (info.kind === 'hash') {
-    const img = figma.getImageByHash(info.hash);
-    if (!img) throw new Error('image ' + info.hash + ' not found');
-    const size = await img.getSizeAsync();
-    return { bytes: await img.getBytesAsync(), nw: size.width, nh: size.height };
-  }
+  if (info.kind === 'hash') return imageFillBytes(info.hash);
   const node = await figma.getNodeByIdAsync(info.node);
   if (!node) throw new Error('node ' + info.node + ' not found');
   const bytes = info.kind === 'shadow' ? await exportShadow(node, info.w, info.h) : await exportNode(node, info.w, info.h);

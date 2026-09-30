@@ -8,7 +8,7 @@ const FF_IR_VERSION = 1;
 // Name suffixes we understand. `_a_b` → tags {a, b}; `_tab:Shop` → {tab: "Shop"}.
 const KNOWN_TAGS = new Set([
   // structure
-  'image', 'img', 'lock', 'frame', 'txt', 'keep', 'ignore', 'scroll', 'list', 'grid', 'aspect', 'fit', 'canvas',
+  'image', 'img', 'lock', 'frame', 'txt', 'keep', 'ignore', 'scroll', 'list', 'grid', 'aspect', 'fit', 'canvas', 'nodim',
   // buttons and states
   'button', 'smooth', 'up', 'magnet', 'select', '3d', 'tilt', 'hover', 'clicked', 'default', 'disabled', 'active',
   'tab', 'open', 'toggle', 'close', 'panel',
@@ -120,7 +120,60 @@ function parseName(raw) {
   }
   if (tags.image || tags.img || tags.lock) bake = true;
   if (tags.smooth) tags.button = true;
-  return { name: parts.join('_') || name, tags, bake };
+  // A short lowercase word after the last '_' reads as a tag the author meant
+  // (`Rays_breath`); report it instead of silently keeping it in the name.
+  let unknown = null;
+  if (parts.length > 1) {
+    const last = parts[parts.length - 1];
+    if (/^[a-z][a-z0-9]{1,11}(:.*)?$/.test(last)) unknown = last.split(':')[0];
+  }
+  return { name: parts.join('_') || name, tags, bake, unknown };
+}
+
+// Pixel size from PNG / JPEG / GIF / WebP header bytes, for when Figma's
+// getSizeAsync fails ("Image dimensions not available" on fills not yet loaded).
+function imageSizeFromBytes(b) {
+  const u32 = i => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0;
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { width: u32(16), height: u32(20) };
+  }
+  if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) {
+    return { width: b[6] | (b[7] << 8), height: b[8] | (b[9] << 8) };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const marker = b[i + 1];
+      const len = (b[i + 2] << 8) | b[i + 3];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { width: (b[i + 7] << 8) | b[i + 8], height: (b[i + 5] << 8) | b[i + 6] };
+      }
+      i += 2 + len;
+    }
+  }
+  if (b.length > 30 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    const kind = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (kind === 'VP8X') return { width: 1 + (b[24] | (b[25] << 8) | (b[26] << 16)), height: 1 + (b[27] | (b[28] << 8) | (b[29] << 16)) };
+    if (kind === 'VP8 ') return { width: (b[26] | (b[27] << 8)) & 0x3fff, height: (b[28] | (b[29] << 8)) & 0x3fff };
+    if (kind === 'VP8L') {
+      const bits = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+  }
+  return null;
+}
+
+// Bytes and pixel size of an image fill. Loading the bytes first also makes
+// getSizeAsync work on fills the page has not drawn yet.
+async function imageFillBytes(hash) {
+  const img = figma.getImageByHash(hash);
+  if (!img) throw new Error('image ' + hash + ' not found');
+  const bytes = await img.getBytesAsync();
+  let size = null;
+  try { size = await img.getSizeAsync(); } catch (e) { size = imageSizeFromBytes(bytes); }
+  if (!size) throw new Error('image ' + hash + ': size unknown');
+  return { bytes, nw: size.width, nh: size.height };
 }
 
 // --- geometry -------------------------------------------------------------
@@ -448,6 +501,12 @@ function extract(rootNode) {
   const images = new Map();
   const warnings = [];
   const fontsUsed = new Set();
+  const unknownTags = new Map(); // suffix -> layer names
+  function noteUnknown(n, meta) {
+    if (!meta.unknown) return;
+    if (!unknownTags.has(meta.unknown)) unknownTags.set(meta.unknown, []);
+    unknownTags.get(meta.unknown).push(n.name);
+  }
 
   const rootBox = { cx: rb.width / 2, cy: rb.height / 2, w: rb.width, h: rb.height, rot: 0 };
 
@@ -592,6 +651,7 @@ function extract(rootNode) {
     if (n.visible === false) return null;
     const meta = parseName(n.name);
     if (meta.tags.ignore) return null;
+    noteUnknown(n, meta);
 
     if (CONTAINERS.has(n.type)) {
       let why = bakeReason(n, meta);
@@ -692,6 +752,7 @@ function extract(rootNode) {
   }
 
   const meta = parseName(rootNode.name);
+  noteUnknown(rootNode, meta);
   const rootIr = { id: rootNode.id, name: meta.name, kind: 'frame', x: 0.5, y: 0.5, w: 1, h: 1, rot: 0, pw: rb.width, ph: rb.height };
   if (Object.keys(meta.tags).length) rootIr.tags = meta.tags;
   const rootFx = effectParams(rootNode, meta.tags);
@@ -702,6 +763,10 @@ function extract(rootNode) {
     if (cornerOf(rootNode).value) rootIr.radius = rootNode.cornerRadius;
   }
   rootIr.children = buildChildren(rootNode, rootBox);
+  for (const [tag, names] of unknownTags) {
+    const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? `, +${names.length - 3} more` : '');
+    warnings.push(`_${tag} is not a FrameFig tag, kept in the name (${shown})`);
+  }
 
   return {
     v: FF_IR_VERSION,
@@ -748,12 +813,7 @@ async function exportShadow(node, w, h) {
 }
 
 async function imageBytes(key, info) {
-  if (info.kind === 'hash') {
-    const img = figma.getImageByHash(info.hash);
-    if (!img) throw new Error('image ' + info.hash + ' not found');
-    const size = await img.getSizeAsync();
-    return { bytes: await img.getBytesAsync(), nw: size.width, nh: size.height };
-  }
+  if (info.kind === 'hash') return imageFillBytes(info.hash);
   const node = await figma.getNodeByIdAsync(info.node);
   if (!node) throw new Error('node ' + info.node + ' not found');
   const bytes = info.kind === 'shadow' ? await exportShadow(node, info.w, info.h) : await exportNode(node, info.w, info.h);

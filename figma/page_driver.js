@@ -11,11 +11,7 @@ async function ffToRGBA(bytes) {
   return { w, h, data: ctx.getImageData(0, 0, w, h).data };
 }
 async function ffExportBytes(info) {
-  if (info.kind === 'hash') {
-    const img = figma.getImageByHash(info.hash);
-    const size = await img.getSizeAsync();
-    return { bytes: await img.getBytesAsync(), nw: size.width, nh: size.height };
-  }
+  if (info.kind === 'hash') return imageFillBytes(info.hash);
   const node = figma.getNodeById(info.node);
   const scale = Math.min(1, FF_MAX / Math.max(info.w, info.h, 1));
   const opts = { format: 'PNG', constraint: { type: 'SCALE', value: scale } };
