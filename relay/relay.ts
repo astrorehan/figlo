@@ -1,9 +1,17 @@
 // FrameFig local relay. The Figma plugin pushes one export (IR + raw RGBA images)
 // and gets a short code; the Studio plugin pulls it with that code.
 // Run: bun relay/relay.ts   (listens on 127.0.0.1 only)
+//
+// Every push is also written to relay/.sessions/<CODE>.ffp, so a code still works
+// after the relay restarts (kept for DISK_TTL_MS).
+
+import { mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 
 const PORT = Number(process.env.FRAMEFIG_PORT ?? 34880);
-const TTL_MS = 60 * 60 * 1000;
+const TTL_MS = 60 * 60 * 1000; // in memory
+const DISK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DISK = new URL("./.sessions/", import.meta.url);
+mkdirSync(DISK, { recursive: true });
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
 
 type Img = { key: string; w: number; h: number; nw?: number; nh?: number; sha: string; data: Uint8Array };
@@ -33,6 +41,35 @@ function newCode(): string {
 function sweep() {
   const now = Date.now();
   for (const [c, s] of sessions) if (now - s.at > TTL_MS) sessions.delete(c);
+}
+
+function sweepDisk() {
+  const now = Date.now();
+  for (const f of readdirSync(DISK)) {
+    const p = new URL(f, DISK);
+    if (now - statSync(p).mtimeMs > DISK_TTL_MS) unlinkSync(p);
+  }
+}
+
+async function store(buf: Uint8Array): Promise<string> {
+  sweep();
+  const s = parsePush(buf);
+  const code = newCode();
+  sessions.set(code, s);
+  await Bun.write(new URL(`${code}.ffp`, DISK), buf);
+  return code;
+}
+
+// A code from before a restart: reload it from disk.
+async function lookup(code: string): Promise<Session | undefined> {
+  const hit = sessions.get(code);
+  if (hit) return hit;
+  if (!/^[A-Z0-9]{6}$/.test(code)) return undefined;
+  const f = Bun.file(new URL(`${code}.ffp`, DISK));
+  if (!(await f.exists())) return undefined;
+  const s = parsePush(new Uint8Array(await f.arrayBuffer()));
+  sessions.set(code, s);
+  return s;
 }
 
 // Push format: "FFP1", u32 LE json length, json {ir, images:[{key,w,h,nw?,nh?}]}, then
@@ -72,10 +109,8 @@ async function handle(req: Request): Promise<Response> {
       }
 
       if (req.method === "POST" && parts[0] === "push") {
-        sweep();
-        const s = parsePush(new Uint8Array(await req.arrayBuffer()));
-        const code = newCode();
-        sessions.set(code, s);
+        const code = await store(new Uint8Array(await req.arrayBuffer()));
+        const s = sessions.get(code)!;
         const mb = s.images.reduce((n, i) => n + i.data.byteLength, 0) / 1e6;
         console.log(`push ${code}: ${s.images.length} images, ${mb.toFixed(1)} MB`);
         return reply(JSON.stringify({ code }));
@@ -84,18 +119,16 @@ async function handle(req: Request): Promise<Response> {
       // Same push as a top-level form navigation (multipart field "ffp"). Browsers that
       // block fetch() from a public page to loopback still allow this.
       if (req.method === "POST" && parts[0] === "push-form") {
-        sweep();
         const file = (await req.formData()).get("ffp");
         if (!(file instanceof Blob)) return reply("missing ffp field", 400, "text/plain");
-        const s = parsePush(new Uint8Array(await file.arrayBuffer()));
-        const code = newCode();
-        sessions.set(code, s);
+        const code = await store(new Uint8Array(await file.arrayBuffer()));
+        const s = sessions.get(code)!;
         const mb = s.images.reduce((n, i) => n + i.data.byteLength, 0) / 1e6;
         console.log(`push ${code}: ${s.images.length} images, ${mb.toFixed(1)} MB (form)`);
         return reply(`<!doctype html><title>FrameFig ${code}</title><h1 id="code">${code}</h1>`, 200, "text/html");
       }
 
-      const s = parts[1] && sessions.get(parts[1].toUpperCase());
+      const s = parts[1] ? await lookup(parts[1].toUpperCase()) : undefined;
       if (parts[0] === "pull" && req.method === "GET") {
         if (!s) return reply(JSON.stringify({ error: "unknown or expired code" }), 404);
         const images = s.images.map((im, i) => ({ i, key: im.key, w: im.w, h: im.h, nw: im.nw, nh: im.nh, sha: im.sha }));
@@ -125,4 +158,5 @@ for (const hostname of ["127.0.0.1", "::1"]) {
   }
 }
 
+sweepDisk();
 console.log(`FrameFig relay on http://localhost:${PORT}`);
