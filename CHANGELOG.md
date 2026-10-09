@@ -9,6 +9,8 @@
 - Add a maximized preview with a faint dotted background and an Escape shortcut
   to return to the guide. Preserve the scene while resizing.
 - Include structural tags and baking aliases in the guide and selection state.
+- Preserve gradients and the full text artwork in the Figma preview, including
+  outlines and text that extends beyond its layout box.
 
 ## 0.1.0-alpha.1
 

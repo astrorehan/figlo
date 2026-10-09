@@ -21,7 +21,7 @@ try {
       if (m?.type === "guide-resize") (window as any).resizeMessages.push(m);
       if (m?.type === "guide-preview" && !("ir" in m) && !m.error) {
         e.stopImmediatePropagation(); (window as any).previewRequests.push(m);
-        if ((window as any).autoPreview) window.postMessage({ pluginMessage: { ...m, name: "Shop", ir: (window as any).previewIR, images: [{ key: "coin", bytes: (window as any).previewBytes }] } }, "*");
+        if ((window as any).autoPreview) window.postMessage({ pluginMessage: { ...m, name: "Shop", ir: (window as any).previewIR, images: (window as any).previewImages } }, "*");
       }
     });
   });
@@ -31,6 +31,12 @@ try {
     const ctx = canvas.getContext("2d")!; ctx.fillStyle = "#ffc14a"; ctx.beginPath(); ctx.arc(30, 30, 26, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#fff2b0"; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = "#965b15"; ctx.font = "bold 28px sans-serif"; ctx.fillText("$", 22, 40);
     (window as any).previewBytes = Array.from(atob(canvas.toDataURL().split(",")[1]), c => c.charCodeAt(0));
+    const title = document.createElement("canvas"); title.width = 464; title.height = 64;
+    const ink = title.getContext("2d")!; ink.textAlign = "center"; ink.font = "italic 900 54px Arial";
+    ink.lineJoin = "round"; ink.lineWidth = 8; ink.strokeStyle = "#18223b"; ink.strokeText("SHOP", 232, 49);
+    const titleFill = ink.createLinearGradient(0, 8, 0, 60); titleFill.addColorStop(0, "#fff8b0"); titleFill.addColorStop(1, "#86efff");
+    ink.fillStyle = titleFill; ink.fillText("SHOP", 232, 49);
+    (window as any).previewImages = [{ key: "coin", bytes: (window as any).previewBytes }, { key: "shop-title", bytes: Array.from(atob(title.toDataURL().split(",")[1]), c => c.charCodeAt(0)) }];
     (window as any).previewIR = ir; (window as any).autoPreview = true;
     (window as any).FigloGuide.configure(spec, tags);
     (window as any).FigloGuide.selection({ count: 1, id: "shop", name: "Shop", tags: {} });
@@ -40,7 +46,17 @@ try {
   async function select(tag: string) { await page.selectOption("#guideCategory", ""); await page.fill("#guideSearch", ""); await page.getByRole("button", { name: tag === "#" ? "# prefix" : "_" + tag, exact: true }).click(); }
   const transform = (id: string) => node(id).evaluate((n: HTMLElement) => n.style.transform);
   const rootTransform = await transform("shop");
+  assert.match(await node("shop").locator(':scope > .preview-paint').evaluate((e: HTMLElement) => e.style.backgroundImage), /linear-gradient.*26, 38, 59.*14, 22, 36/);
+  assert.match(await node("details").locator(':scope > .preview-paint').evaluate((e: HTMLElement) => e.style.backgroundImage), /linear-gradient.*61, 77, 102.*31, 43, 66/);
+  const gradientBefore = await node("details").locator(':scope > .preview-paint').evaluate((e: HTMLElement) => e.style.backgroundPosition);
   await page.waitForTimeout(200); assert.equal(await transform("shop"), rootTransform);
+  assert.notEqual(await node("details").locator(':scope > .preview-paint').evaluate((e: HTMLElement) => e.style.backgroundPosition), gradientBefore);
+  const textBounds = await node("title").evaluate((e: HTMLElement) => {
+    const layout = e.getBoundingClientRect(), image = e.querySelector('img')!.getBoundingClientRect();
+    return { top: image.top - layout.top, bottom: image.bottom - layout.bottom, width: image.width / layout.width, height: image.height / layout.height };
+  });
+  assert.ok(textBounds.top < 0 && textBounds.bottom > 0); assert.ok(textBounds.width > 1 && textBounds.height > 1);
+  assert.equal(await node("title").locator('.preview-band').evaluate((e: HTMLElement) => e.style.transform), await node("title").locator('img').evaluate((e: HTMLElement) => e.style.transform));
   assert.notEqual(await transform("sparkle"), 'translate(-50%,-50%) translate(0px,0px) rotate(0deg) scale(1,1)');
   await select("wiggle"); await page.waitForTimeout(150);
   assert.equal(await transform("shop"), rootTransform);
@@ -105,7 +121,7 @@ try {
   await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, ir: (window as any).previewIR, images: [], name: "Old" }), old);
   assert.equal(await page.locator(".preview-node").count(), 0);
   await page.waitForTimeout(220); const next = await page.evaluate(() => (window as any).previewRequests.at(-1));
-  await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, name: "Other", ir: (window as any).previewIR, images: [{ key: "coin", bytes: (window as any).previewBytes }] }), next);
+  await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, name: "Other", ir: (window as any).previewIR, images: (window as any).previewImages }), next);
   assert.equal(await node("buy").count(), 1);
   await page.evaluate(() => (window as any).FigloGuide.refresh()); await page.waitForTimeout(220);
   const failed = await page.evaluate(() => (window as any).previewRequests.at(-1));
@@ -121,5 +137,5 @@ try {
   await reduced.goto(new URL("../figma/plugin/ui.html", import.meta.url).href);
   await reduced.evaluate(({ spec, tags }: any) => (window as any).FigloGuide.configure(spec, tags), { spec: EFFECTS, tags: [...KNOWN_TAGS] });
   await reduced.click("#tabGuide"); assert.equal(await reduced.textContent("#guidePause"), "Play");
-  console.log("UI preview browser: child tags, saved settings, composed effects, hover/press/release, nodim, when, navigation, scrolling, maximize/restore, dots, stale replies and reduced motion passed");
+  console.log("UI preview browser: gradients/tide, full text artwork/gleam, child tags, saved settings, composed effects, hover/press/release, nodim, when, navigation, scrolling, maximize/restore, dots, stale replies and reduced motion passed");
 } finally { await browser.close(); }

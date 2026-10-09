@@ -401,6 +401,10 @@ parent.postMessage({ pluginMessage: { type: 'selection?' } }, '*');
   const make = (tag, cls) => { const e = document.createElement(tag); e.className = cls; return e; };
   const color = (c = [1, 1, 1], a = 1) => 'rgba(' + c.map(v => Math.round(clamp(v, 0, 1) * 255)).join(',') + ',' + clamp(a, 0, 1) + ')';
   function gradient(g, angle = g.rot || 0) { return 'linear-gradient(' + (angle + 90) + 'deg,' + g.keys.map(k => color(k.slice(1, 4), k[4]) + ' ' + k[0] * 100 + '%').join(',') + ')'; }
+  function placeArtwork(e, box) {
+    if (!box) return;
+    Object.assign(e.style, { left: box.x * 100 + '%', top: box.y * 100 + '%', right: 'auto', bottom: 'auto', width: box.w * 100 + '%', height: box.h * 100 + '%', transform: 'translate(-50%,-50%) rotate(' + box.rot + 'deg)' });
+  }
 
   class Preview {
     constructor(host, ir, assets, definitions, report) {
@@ -446,12 +450,12 @@ parent.postMessage({ pluginMessage: { type: 'selection?' } }, '*');
       if (r.button) { e.setAttribute('role', 'button'); e.setAttribute('aria-label', n.name); e.tabIndex = 0; e.dataset.button = 'true'; }
       if (r.button || pointerTags.some(t => n.tags?.[t]) || n.kind === 'scroll') e.style.pointerEvents = 'auto';
       r.paint = make('span', 'preview-paint'); r.paint.style.borderRadius = 'inherit'; e.append(r.paint);
-      if (n.fill) r.paint.style.background = n.fill.g ? gradient(n.fill.g) : color(n.fill.c, n.fill.a);
+      if (n.fill) r.paint.style.background = n.fill.grad ? gradient(n.fill.grad) : color(n.fill.c, n.fill.a);
       if (n.stroke) r.paint.style.boxShadow = 'inset 0 0 0 ' + n.stroke.w + 'px ' + color(n.stroke.c, n.stroke.a);
       const imageKey = n.kind === 'text' ? n.textImage : n.image;
       if (imageKey && this.assets.has(imageKey)) {
         if (n.scale === 'TILE') { r.paint.style.backgroundImage = 'url("' + this.assets.get(imageKey).url + '")'; r.paint.style.backgroundRepeat = 'repeat'; const a = this.assets.get(imageKey); r.paint.style.backgroundSize = a.w * (n.tileScale || 1) + 'px ' + a.h * (n.tileScale || 1) + 'px'; }
-        else { const img = make('img', 'preview-image'); img.src = this.assets.get(imageKey).url; img.alt = n.kind === 'text' ? n.text.value : ''; img.draggable = false; img.style.objectFit = n.scale === 'FIT' ? 'contain' : n.scale === 'FILL' ? 'cover' : 'fill'; r.paint.append(img); r.image = img; }
+        else { const img = make('img', 'preview-image'); img.src = this.assets.get(imageKey).url; img.alt = n.kind === 'text' ? n.text.value : ''; img.draggable = false; img.style.objectFit = n.scale === 'FIT' ? 'contain' : n.scale === 'FILL' ? 'cover' : 'fill'; placeArtwork(img, n.textImageBox); r.paint.append(img); r.image = img; }
         r.paint.style.opacity = n.imageAlpha ?? 1;
       } else if (n.kind === 'text') this.text(r, n.text.value);
       if (['clip', 'canvas'].includes(n.kind)) e.style.overflow = 'hidden';
@@ -464,7 +468,7 @@ parent.postMessage({ pluginMessage: { type: 'selection?' } }, '*');
       }
       for (const tag of ['shiny', 'gleam', 'sheen']) if (r.fx[tag] && (tag !== 'gleam' || n.kind === 'text')) {
         const band = make('span', 'preview-band'); band.style.borderRadius = 'inherit';
-        if (r.image) { band.style.maskImage = 'url("' + r.image.src + '")'; band.style.maskSize = '100% 100%'; }
+        if (r.image) { band.style.maskImage = 'url("' + r.image.src + '")'; band.style.maskSize = '100% 100%'; band.style.maskRepeat = 'no-repeat'; placeArtwork(band, n.textImageBox); }
         r.paint.append(band); r.bands.push({ tag, e: band });
       }
       holder.append(e);
@@ -564,7 +568,7 @@ parent.postMessage({ pluginMessage: { type: 'selection?' } }, '*');
         const dim = dimSource?.fx.button, dimState = dimSource && (dimSource.locked ? 'rest' : dimSource.press ? 'press' : dimSource.hover ? 'hover' : 'rest');
         r.paint.style.filter = dim ? 'brightness(' + (dimState === 'press' ? dim.pressDim : dimState === 'hover' ? dim.hoverDim : 1) + ')' : '';
         if (r.fx.halo) { const v = r.fx.halo, k = v.low + (v.high - v.low) * (.5 - .5 * Math.cos(this.time * TAU * v.rate)); const tint = /^#?[0-9a-f]{6}$/i.test(v.color) ? '#' + v.color.replace('#', '') : '#fff'; r.paint.style.filter += ' drop-shadow(0 0 ' + v.size + 'px ' + tint + Math.round(clamp(k, 0, 1) * 255).toString(16).padStart(2, '0') + ')'; }
-        if (r.fx.tide && r.n.fill?.g) { const v = r.fx.tide; r.paint.style.backgroundImage = gradient(r.n.fill.g, r.n.fill.g.rot + this.time * v.turn); r.paint.style.backgroundSize = '200% 100%'; r.paint.style.backgroundPosition = (50 + Math.sin(this.time * TAU * v.rate) * v.amp * 50) + '% 50%'; }
+        if (r.fx.tide && r.n.fill?.grad) { const v = r.fx.tide; r.paint.style.backgroundImage = gradient(r.n.fill.grad, r.n.fill.grad.rot + this.time * v.turn); r.paint.style.backgroundSize = '200% 100%'; r.paint.style.backgroundPosition = (50 + Math.sin(this.time * TAU * v.rate) * v.amp * 50) + '% 50%'; }
         if (r.fx.drift && r.n.scale === 'TILE') { const v = r.fx.drift, angle = v.angle * Math.PI / 180; r.paint.style.backgroundPosition = this.time * v.speed * Math.sin(angle) + 'px ' + -this.time * v.speed * Math.cos(angle) + 'px'; }
         for (const band of r.bands) {
           const v = r.fx[band.tag], elapsed = band.tag === 'sheen' ? this.time - source.entered : this.time % (v.time + (v.cooldown || 0)), p = elapsed / v.time;

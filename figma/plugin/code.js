@@ -936,9 +936,10 @@ async function buildGuideScene(source, isCurrent) {
     check();
     if (!CONTAINERS.has(source.type)) {
       const meta = parseName(source.name);
-      const bytes = await source.exportAsync({ format: 'PNG', useAbsoluteBounds: true, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(bounds.width, bounds.height)) } });
+      const artwork = source.absoluteRenderBounds || bounds;
+      const bytes = await source.exportAsync({ format: 'PNG', useAbsoluteBounds: false, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(artwork.width, artwork.height)) } });
       check(); addImage(source.id, bytes);
-      return { ir: { design: { w: bounds.width, h: bounds.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: bounds.width, ph: bounds.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images };
+      return { ir: { design: { w: artwork.width, h: artwork.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: artwork.width, ph: artwork.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images };
     }
     const transform = source.absoluteTransform;
     const width = source.width, height = source.height;
@@ -962,10 +963,19 @@ async function buildGuideScene(source, isCurrent) {
     async function textImages(node) {
       if (node.kind === 'text') {
         check(); const text = await figma.getNodeByIdAsync(node.id);
-        const bytes = await withoutFoldAsync(text, () => text.exportAsync({ format: 'PNG', useAbsoluteBounds: true, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(node.pw, node.ph)) } }));
-        node.textImage = 'preview-text:' + node.id; addImage(node.textImage, bytes);
-        // PNG already contains the text layer's own opacity, like baked images.
-        delete node.opacity;
+        await withoutFoldAsync(text, async () => {
+          const origin = { x: 0, y: 0 };
+          const ink = renderBox(text, origin);
+          if (!(ink.w > 0 && ink.h > 0)) return;
+          const bytes = await text.exportAsync({ format: 'PNG', useAbsoluteBounds: false, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(ink.w, ink.h)) } });
+          // Keep the layout box for interaction/effects. Position the full ink
+          // separately so outlines, descenders and shadows are not squeezed
+          // into it. PNGs are axis-aligned, including for rotated text.
+          node.textImageBox = relative(ink, nodeBox(text, origin));
+          node.textImage = 'preview-text:' + node.id; addImage(node.textImage, bytes);
+          // PNG already contains the text layer's own opacity.
+          delete node.opacity;
+        });
       }
       for (const child of node.children || []) await textImages(child);
     }

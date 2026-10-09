@@ -101,7 +101,7 @@ describe("Tag Guide", () => {
     const p = plugin([a]); const result = await p.preview(7);
     expect(result).toMatchObject({ id: "1:2", requestId: 7, name: "Level bar" });
     expect([...result.images[0].bytes]).toEqual([1, 2, 3]);
-    expect(options).toEqual({ format: "PNG", useAbsoluteBounds: true, constraint: { type: "SCALE", value: .5 } });
+    expect(options).toEqual({ format: "PNG", useAbsoluteBounds: false, constraint: { type: "SCALE", value: .5 } });
     expect(a.name).toBe("Level bar"); expect(a.data()).toEqual({ pulse: { amp: .2 } });
     await p.figma.ui.onmessage({ type: "selection?" });
     expect(p.messages.findLast(m => m.type === "fx-state").id).toBe("1:2");
@@ -153,6 +153,36 @@ describe("Tag Guide", () => {
     expect(panel.name).toBe("Figlo Demo");
     expect(panel.children[2].name).toBe("Buy_button_smooth");
     expect(panel.children).toHaveLength(3);
+  });
+  test("preserves gradient paints and exports text ink outside its layout box", async () => {
+    const panel = demoFrame(), title = panel.children[0];
+    panel.children[1].fills = [{ type: 'GRADIENT_LINEAR', gradientTransform: [[0, 1, 0], [1, 0, 0]], opacity: .8,
+      gradientStops: [{ position: 0, color: { r: .3, g: .3, b: .3, a: 1 } }, { position: 1, color: { r: .1, g: .1, b: .1, a: .5 } }] }];
+    title.absoluteRenderBounds = { x: 36, y: 34, width: 572, height: 66 };
+    let options: any;
+    title.exportAsync = async (o: any) => { options = o; return new Uint8Array([1, 2, 3]); };
+    const p = plugin([panel]), result = await p.preview();
+    expect(result.error).toBeUndefined();
+    expect(result.ir.root.children[1].fill).toEqual({ grad: { rot: 90, keys: [[0, .3, .3, .3, .8], [1, .1, .1, .1, .4]] } });
+    const previewTitle = result.ir.root.children[0];
+    expect(previewTitle.pw).toBe(560); expect(previewTitle.ph).toBe(52);
+    expect(previewTitle.textImageBox).toEqual({ x: .50357, y: .51923, w: 1.02143, h: 1.26923, rot: 0 });
+    expect(options.useAbsoluteBounds).toBe(false);
+    expect(options.constraint.value).toBeCloseTo(1024 / 572);
+    expect(title.absoluteRenderBounds).toEqual({ x: 36, y: 34, width: 572, height: 66 });
+    expect(p.copies.every(n => n.removed)).toBe(true);
+  });
+  test("positions rotated text PNGs in page axes without rotating them twice", async () => {
+    const panel = demoFrame(), title = panel.children[0];
+    title.width = 100; title.height = 20;
+    title.rotation = -90; title.absoluteTransform = [[0, -1, 100], [1, 0, 40]];
+    title.absoluteBoundingBox = { x: 80, y: 40, width: 20, height: 100 };
+    title.absoluteRenderBounds = { x: 76, y: 38, width: 28, height: 106 };
+    const result = await plugin([panel]).preview();
+    expect(result.error).toBeUndefined();
+    const previewTitle = result.ir.root.children[0];
+    expect(previewTitle.rot).toBe(90);
+    expect(previewTitle.textImageBox).toEqual({ x: .51, y: .5, w: .28, h: 5.3, rot: -90 });
   });
   test("removes temporary copies after successful and failed asset exports", async () => {
     const a = demoFrame(); const p = plugin([a]);
