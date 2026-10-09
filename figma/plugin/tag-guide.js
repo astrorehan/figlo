@@ -72,6 +72,7 @@
   let visible = false, expanded = false, preview = null, assets = new Map(), savedScroll = 0;
   let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   let previewError = '', previewTimer = 0, requestId = 0, sceneData = null;
+  let editId = null, layers = [];
   const valueDefaults = { when: 'hover', goto: 'Details', show: 'Details', hide: '', switch: 'Details' };
   for (const category of Object.keys(groups)) { const option = make('option', '', category); option.value = category; el('guideCategory').append(option); }
 
@@ -96,7 +97,7 @@
   function example() {
     const entry = catalogue.find(e => e.tag === selected);
     const value = el('guideValue').value.trim();
-    const parts = selection.count === 1 ? selection.name.split('_') : [entry.example.split('_')[0]];
+    const parts = editLayer() ? editLayer().name.split('_') : [entry.example.split('_')[0]];
     while (parts.length > 1 && known.has(parts.at(-1).split(':')[0].toLowerCase())) parts.pop();
     const base = parts.join('_').replace(/^#/, '');
     el('guideExample').textContent = selected === '#' ? '#' + base : base + '_' + selected + (spec[selected]?.value && value ? ':' + value : '');
@@ -108,16 +109,16 @@
     for (const [key, p] of Object.entries(definitions)) {
       const row = make('div', 'param'), label = make('label', '', p.label), input = make('input');
       input.id = 'guide-param-' + key; label.htmlFor = input.id;
-      input.disabled = !matchingNodes(selected).length;
+      input.disabled = !editLayer() && !matchingNodes(selected).length;
       input.type = p.type === 'text' ? 'text' : 'range'; input.value = values[key];
       row.append(label, input);
       if (p.type !== 'text') {
         input.min = p.min; input.max = p.max; input.step = p.step;
         input.value = values[key];
         const output = make('output', '', values[key]); output.htmlFor = input.id; row.append(output);
-        input.oninput = () => { values[key] = Number(input.value); output.value = input.value; preview?.updateTag(selected, values); };
+        input.oninput = () => { values[key] = Number(input.value); output.value = input.value; preview?.updateTag(selected, values, editId); };
       } else {
-        input.oninput = () => { values[key] = input.value; preview?.updateTag(selected, values); };
+        input.oninput = () => { values[key] = input.value; preview?.updateTag(selected, values, editId); };
         if (/Sound$/.test(key)) {
           input.title = 'Saved when applied. Audio is not played in this preview.';
           row.append(make('small', '', 'Audio plays in Roblox, not in this preview.'));
@@ -129,26 +130,53 @@
 
   function matchingNodes(tag) {
     const out = [];
-    function visit(n) { if (n.tags?.[tag]) out.push(n); for (const c of n.children || []) visit(c); }
+    function visit(n) { if (n.tags?.[tag] && (!editId || n.id === editId)) out.push(n); for (const c of n.children || []) visit(c); }
     if (sceneData) visit(sceneData.ir.root);
     return out;
   }
+  function editLayer() { return layers.find(layer => layer.id === editId); }
+  function layerTags() {
+    el('guideLayerTags').replaceChildren();
+    const layer = editLayer();
+    if (!layer) { el('guideLayerNote').textContent = 'Choose a child to edit its tags. The canvas selection stays on your panel.'; return; }
+    for (const [tag, value] of Object.entries(layer.tags || {})) {
+      if (!known.has(tag) && tag !== '#') continue;
+      const chip = make('button', '', tag === '#' ? '# prefix' : '_' + tag + (typeof value === 'string' ? ':' + value : ''));
+      chip.dataset.tag = tag; chip.setAttribute('aria-pressed', String(tag === selected));
+      chip.onclick = () => { el('guideSearch').value = ''; el('guideCategory').value = ''; choose(tag); list(); };
+      el('guideLayerTags').append(chip);
+    }
+    el('guideLayerNote').textContent = preview?.byId.has(layer.id) ? (Object.keys(layer.tags || {}).length ? 'Choose one of its tags to change the settings.' : 'No tags on this layer. Choose a tag from the guide to add one.') : 'This layer is hidden, ignored or inside baked artwork. You can edit its tags here, but it has no separate interaction in this preview.';
+  }
+  function layerOptions() {
+    el('guideLayer').replaceChildren(make('option', '', 'Choose a layer…'));
+    el('guideLayer').firstChild.value = '';
+    for (const layer of layers) {
+      const option = make('option', '', (layer.depth ? '　'.repeat(layer.depth) + '↳ ' : 'Panel · ') + layer.name);
+      option.value = layer.id; el('guideLayer').append(option);
+    }
+    if (!editLayer()) editId = null;
+    el('guideLayer').value = editId || ''; el('guideLayer').disabled = !layers.length;
+    layerTags();
+  }
   function choose(tag) {
     selected = tag;
-    const entry = catalogue.find(e => e.tag === tag), first = matchingNodes(tag)[0];
-    values = Object.fromEntries(Object.entries(spec[tag]?.params || {}).map(([k, p]) => [k, preview?.tagValues(tag)?.[k] ?? first?.fx?.[tag]?.[k] ?? p.def]));
+    const entry = catalogue.find(e => e.tag === tag), first = editLayer() || matchingNodes(tag)[0];
+    values = Object.fromEntries(Object.entries(spec[tag]?.params || {}).map(([k, p]) => [k, preview?.tagValues(tag, editId)?.[k] ?? first?.fx?.[tag]?.[k] ?? p.def]));
     el('guideTitle').textContent = tag === '#' ? '# prefix' : '_' + tag;
     el('guideGroup').textContent = entry.category;
     el('guideDescription').textContent = description(entry);
     el('guidePlacement').textContent = entry.placement;
     el('guideValueRow').hidden = !spec[tag]?.value;
     el('guideValueLabel').textContent = spec[tag]?.value || '';
-    el('guideValue').value = typeof first?.tags[tag] === 'string' ? first.tags[tag] : valueDefaults[tag] ?? '';
+    el('guideValue').value = typeof first?.tags?.[tag] === 'string' ? first.tags[tag] : valueDefaults[tag] ?? '';
     example(); params(); updateSelection();
     const matches = matchingNodes(tag);
-    for (const input of el('guideParams').querySelectorAll('input')) input.disabled = !matches.length;
-    el('guideSettingsNote').textContent = matches.length ? 'Preview settings for ' + matches.length + (matches.length === 1 ? ' tagged layer.' : ' tagged layers.') : 'No layer in this frame has this tag yet.';
-    el('guideReset').disabled = !matches.length;
+    for (const input of el('guideParams').querySelectorAll('input')) input.disabled = !editLayer() && !matches.length;
+    el('guideSettingsTitle').textContent = editLayer() ? 'Layer settings' : 'Preview settings';
+    el('guideSettingsNote').textContent = editLayer() ? 'Editing ' + editLayer().name + '. Save to keep these settings in Figma.' : matches.length ? 'Preview settings for ' + matches.length + (matches.length === 1 ? ' tagged layer.' : ' tagged layers.') : 'No layer in this frame has this tag yet.';
+    el('guideReset').disabled = !editLayer() && !matches.length;
+    layerTags();
   }
   function clearScene() {
     preview?.destroy(); preview = null;
@@ -179,21 +207,30 @@
   }
 
   function updateSelection() {
-    const has = selection.tags[selected]?.count === selection.count && selection.count > 0;
-    el('guideApply').disabled = !selection.count || !Object.keys(spec).length;
-    el('guideApply').textContent = (has ? 'Update' : 'Add to') + (selection.count > 1 ? ' ' + selection.count + ' selected layers' : ' selected layer');
+    const layer = editLayer(), has = !!layer?.tags?.[selected];
+    el('guideActions').hidden = !layer;
+    el('guideApply').disabled = !layer || !Object.keys(spec).length;
+    el('guideApply').textContent = has ? 'Save settings' : 'Add ' + (selected === '#' ? '# prefix' : '_' + selected);
+    el('guideRemove').hidden = !has;
     el('guideSelection').className = '';
-    el('guideSelection').textContent = !selection.count ? 'Select a layer to add this tag.' : selection.count === 1 ? selection.name : selection.count + ' layers selected';
+    el('guideSelection').textContent = layer ? 'Changes apply to ' + layer.name + '.' : '';
   }
   el('guideSearch').oninput = list; el('guideCategory').onchange = list;
+  el('guideLayer').onchange = () => {
+    editId = el('guideLayer').value || null;
+    const tags = Object.keys(editLayer()?.tags || {}).filter(tag => known.has(tag) || tag === '#');
+    const next = tags.includes(selected) ? selected : tags.find(tag => Object.keys(spec[tag]?.params || {}).length) || tags[0] || selected;
+    el('guideSearch').value = ''; el('guideCategory').value = ''; choose(next); list();
+  };
   el('guideValue').oninput = example;
   el('guidePause').onclick = () => { playing = !playing; pauseLabel(); preview?.play(playing); };
   el('guideReplay').onclick = () => { if (!preview) { refresh(); return; } preview.replay(); el('guideNote').textContent = 'Preview: ' + selection.name; };
   el('guideRefresh').onclick = refresh;
   el('guideMaximize').onclick = () => maximize(!expanded);
   document.addEventListener('keydown', e => { if (expanded && e.key === 'Escape') { e.preventDefault(); maximize(false); el('guideMaximize').focus(); } });
-  el('guideReset').onclick = () => { values = Object.fromEntries(Object.entries(spec[selected]?.params || {}).map(([k, p]) => [k, p.def])); params(); preview?.updateTag(selected, values); };
-  el('guideApply').onclick = () => parent.postMessage({ pluginMessage: { type: 'guide-apply', tag: selected, value: el('guideValue').value.trim(), params: { ...values } } }, '*');
+  el('guideReset').onclick = () => { values = Object.fromEntries(Object.entries(spec[selected]?.params || {}).map(([k, p]) => [k, p.def])); params(); preview?.updateTag(selected, values, editId); };
+  el('guideApply').onclick = () => { if (editLayer()) parent.postMessage({ pluginMessage: { type: 'guide-apply', rootId: selection.id, nodeId: editId, tag: selected, value: el('guideValue').value.trim(), params: { ...values } } }, '*'); };
+  el('guideRemove').onclick = () => { if (editLayer()) parent.postMessage({ pluginMessage: { type: 'guide-remove', rootId: selection.id, nodeId: editId, tag: selected } }, '*'); };
   el('guideCopy').onclick = async () => {
     const value = el('guideExample').textContent;
     try { await navigator.clipboard.writeText(value); } catch { const t = make('textarea'); t.value = value; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
@@ -206,14 +243,14 @@
     selection(message) {
       const changed = message.id !== selection.id || message.count !== selection.count;
       selection = message; updateSelection(); example();
-      if (changed) { clearScene(); previewError = ''; placeholder(); choose(selected); }
+      if (changed) { editId = null; layers = []; clearScene(); layerOptions(); previewError = ''; placeholder(); choose(selected); }
       refresh();
     },
     refresh,
     async preview(message) {
       const current = () => visible && message.requestId === requestId && message.id === selection.id && selection.count === 1;
       if (!current()) return;
-      if (message.error) { clearScene(); previewError = message.error; placeholder(); choose(selected); return; }
+      if (message.error) { clearScene(); layers = []; layerOptions(); previewError = message.error; placeholder(); choose(selected); return; }
       const nextAssets = new Map();
       try {
         for (const item of message.images || []) {
@@ -225,16 +262,25 @@
       } catch {
         for (const a of nextAssets.values()) URL.revokeObjectURL(a.url);
         if (!current()) return;
-        clearScene(); previewError = 'Could not load the preview images. Use Refresh to try again.'; placeholder(); return;
+        clearScene(); layers = []; layerOptions(); previewError = 'Could not load the preview images. Use Refresh to try again.'; placeholder(); choose(selected); return;
       }
       if (!current()) { for (const a of nextAssets.values()) URL.revokeObjectURL(a.url); return; }
       clearScene(); assets = nextAssets; sceneData = message; previewError = '';
+      layers = message.layers || [];
+      if (!message.layers) {
+        const visit = (n, depth = 0) => { if (!/:(bg|shadow|clip)$/.test(n.id)) layers.push({ ...n, depth }); for (const c of n.children || []) visit(c, depth + 1); };
+        visit(message.ir.root);
+      }
       preview = window.FigloPreview.mount(el('guideStage'), message.ir, assets, spec, text => { el('guideNote').textContent = text; });
       preview.play(playing); el('guideStage').setAttribute('aria-busy', 'false');
       el('guideNote').textContent = message.ir.warnings?.length ? message.ir.warnings.join(' · ') : 'Preview: ' + message.name;
-      choose(selected); el('guidePreviewTitle').textContent = message.name;
+      layerOptions(); choose(selected); el('guidePreviewTitle').textContent = message.name;
     },
-    applied(message) { el('guideSelection').textContent = message.error || 'Applied to ' + message.count + (message.count === 1 ? ' layer.' : ' layers.'); el('guideSelection').className = message.error ? 'err' : ''; },
+    applied(message) {
+      if (message.rootId !== selection.id || message.nodeId !== editId) return;
+      el('guideSelection').textContent = message.error || (message.action === 'remove' ? 'Tag removed.' : 'Saved to ' + editLayer()?.name + '.'); el('guideSelection').className = message.error ? 'err' : '';
+      if (!message.error) refresh();
+    },
     setVisible(value) { visible = value; preview?.setVisible(value); if (visible) { if (!preview) placeholder(); refresh(); } else { clearTimeout(previewTimer); ++requestId; parent.postMessage({ pluginMessage: { type: 'guide-preview-cancel' } }, '*'); if (expanded) maximize(false); } },
   };
 })();

@@ -11,6 +11,8 @@
 - Include structural tags and baking aliases in the guide and selection state.
 - Preserve gradients and the full text artwork in the Figma preview, including
   outlines and text that extends beyond its layout box.
+- Make tag editing optional and let the guide add, remove and configure tags on
+  individual children while the parent panel stays selected.
 
 ## 0.1.0-alpha.1
 

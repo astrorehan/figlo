@@ -17,11 +17,11 @@ try {
     (window as any).guideMessages = []; (window as any).previewRequests = []; (window as any).resizeMessages = [];
     window.addEventListener("message", e => {
       const m = e.data.pluginMessage;
-      if (m?.type === "guide-apply") (window as any).guideMessages.push(m);
+      if (m?.type === "guide-apply" || m?.type === "guide-remove") (window as any).guideMessages.push(m);
       if (m?.type === "guide-resize") (window as any).resizeMessages.push(m);
       if (m?.type === "guide-preview" && !("ir" in m) && !m.error) {
         e.stopImmediatePropagation(); (window as any).previewRequests.push(m);
-        if ((window as any).autoPreview) window.postMessage({ pluginMessage: { ...m, name: "Shop", ir: (window as any).previewIR, images: (window as any).previewImages } }, "*");
+        if ((window as any).autoPreview) window.postMessage({ pluginMessage: { ...m, name: "Shop", ir: (window as any).previewIR, images: (window as any).previewImages, layers: (window as any).previewLayers } }, "*");
       }
     });
   });
@@ -38,6 +38,11 @@ try {
     ink.fillStyle = titleFill; ink.fillText("SHOP", 232, 49);
     (window as any).previewImages = [{ key: "coin", bytes: (window as any).previewBytes }, { key: "shop-title", bytes: Array.from(atob(title.toDataURL().split(",")[1]), c => c.charCodeAt(0)) }];
     (window as any).previewIR = ir; (window as any).autoPreview = true;
+    const layers: any[] = [];
+    const visit = (n: any, depth = 0) => { layers.push({ id: n.id, name: n.name, depth, tags: n.tags || {}, fx: n.fx || {} }); for (const child of n.children || []) visit(child, depth + 1); };
+    visit(ir.root);
+    layers.push({ id: 'hidden-icon', name: 'Hidden icon_pulse', depth: 2, tags: { pulse: true }, fx: { pulse: { amp: .25, rate: 2 } }, hidden: true });
+    (window as any).previewLayers = layers;
     (window as any).FigloGuide.configure(spec, tags);
     (window as any).FigloGuide.selection({ count: 1, id: "shop", name: "Shop", tags: {} });
   }, { spec: EFFECTS, tags: [...KNOWN_TAGS], ir: shopPreview() });
@@ -114,6 +119,50 @@ try {
   await page.addStyleTag({ content: ':root { --figma-color-bg:#252525; --figma-color-text:#eee; --figma-color-bg-secondary:#363636; --figma-color-border:#505050; --figma-color-text-secondary:#aaa; }' });
   await page.screenshot({ path: fileURLToPath(new URL("../build/tag-guide-dark.png", import.meta.url)), fullPage: true });
   assert.equal(await page.$eval("body", (n: Element) => n.scrollWidth > innerWidth), false);
+  // Editing is optional and targets a child, leaving the preview's root intact.
+  assert.equal(await page.isVisible('#guideActions'), false);
+  await page.click('#guideLayerEditor summary');
+  await page.selectOption('#guideLayer', 'buy');
+  await page.locator('#guideLayerTags button[data-tag="smooth"]').click();
+  if (!await page.$eval('#guideSettings', (e: HTMLDetailsElement) => e.open)) await page.click('#guideSettings summary');
+  assert.equal(await page.inputValue('#guide-param-hover'), '1.2');
+  await page.$eval('#guide-param-hover', (e: HTMLInputElement) => { e.value = '1.3'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await node('buy').hover(); await page.waitForTimeout(150); assert.match(await transform('buy'), /scale\(1.3,\s*1.3\)/);
+  await node('other-buy').hover(); await page.waitForTimeout(150); assert.match(await transform('other-buy'), /scale\(1.2,\s*1.2\)/);
+  assert.equal(await transform('shop'), rootTransform);
+  assert.equal(await page.evaluate(() => (window as any).guideMessages.length), 0);
+  await page.click('#guideApply'); await page.waitForTimeout(50);
+  const saved = await page.evaluate(() => (window as any).guideMessages.at(-1));
+  assert.equal(saved.rootId, 'shop'); assert.equal(saved.nodeId, 'buy'); assert.equal(saved.tag, 'smooth'); assert.equal(saved.params.hover, 1.3);
+  await page.evaluate((m: any) => {
+    const visit = (n: any): any => n.id === m.nodeId ? n : (n.children || []).map(visit).find(Boolean);
+    const target = visit((window as any).previewIR.root); target.fx.smooth = m.params;
+    (window as any).FigloGuide.applied({ ...m, action: 'save', count: 1 });
+  }, saved);
+  await page.waitForTimeout(300);
+  assert.equal(await page.inputValue('#guideLayer'), 'buy'); assert.equal(await page.inputValue('#guide-param-hover'), '1.3');
+  await page.screenshot({ path: fileURLToPath(new URL('../build/tag-guide-child-settings.png', import.meta.url)), fullPage: true });
+  await page.selectOption('#guideLayer', 'hover');
+  assert.equal(await page.inputValue('#guideValue'), 'hover|press');
+  await page.fill('#guideValue', 'press'); await page.click('#guideApply'); await page.waitForTimeout(50);
+  const stateEdit = await page.evaluate(() => (window as any).guideMessages.at(-1));
+  assert.equal(stateEdit.nodeId, 'hover'); assert.equal(stateEdit.tag, 'when'); assert.equal(stateEdit.value, 'press');
+  await page.click('#guideRemove'); await page.waitForTimeout(50);
+  const removed = await page.evaluate(() => (window as any).guideMessages.at(-1));
+  assert.equal(removed.type, 'guide-remove'); assert.equal(removed.nodeId, 'hover'); assert.equal(removed.rootId, 'shop');
+  await page.selectOption('#guideLayer', 'clothes'); await select('pulse');
+  assert.equal(await page.isDisabled('#guide-param-amp'), false);
+  const clothesBefore = await transform('clothes');
+  await page.$eval('#guide-param-amp', (e: HTMLInputElement) => { e.value = '.2'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  assert.equal(await transform('clothes'), clothesBefore);
+  await page.click('#guideApply'); await page.waitForTimeout(50);
+  const added = await page.evaluate(() => (window as any).guideMessages.at(-1));
+  assert.equal(added.nodeId, 'clothes'); assert.equal(added.tag, 'pulse'); assert.equal(added.params.amp, .2);
+  await page.selectOption('#guideLayer', 'hidden-icon');
+  assert.equal(await page.inputValue('#guide-param-amp'), '0.25');
+  assert.match(await page.textContent('#guideLayerNote') || '', /hidden, ignored or inside baked artwork/);
+  await page.selectOption('#guideLayer', ''); assert.equal(await page.isVisible('#guideActions'), false);
+  assert.equal(await transform('shop'), rootTransform);
   // Replies for an older selection are ignored, including failed decodes.
   await page.evaluate(() => { (window as any).autoPreview = false; (window as any).FigloGuide.refresh(); }); await page.waitForTimeout(220);
   const old = await page.evaluate(() => (window as any).previewRequests.at(-1));
@@ -121,7 +170,7 @@ try {
   await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, ir: (window as any).previewIR, images: [], name: "Old" }), old);
   assert.equal(await page.locator(".preview-node").count(), 0);
   await page.waitForTimeout(220); const next = await page.evaluate(() => (window as any).previewRequests.at(-1));
-  await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, name: "Other", ir: (window as any).previewIR, images: (window as any).previewImages }), next);
+  await page.evaluate((m: any) => (window as any).FigloGuide.preview({ ...m, name: "Other", ir: (window as any).previewIR, images: (window as any).previewImages, layers: (window as any).previewLayers }), next);
   assert.equal(await node("buy").count(), 1);
   await page.evaluate(() => (window as any).FigloGuide.refresh()); await page.waitForTimeout(220);
   const failed = await page.evaluate(() => (window as any).previewRequests.at(-1));
@@ -137,5 +186,5 @@ try {
   await reduced.goto(new URL("../figma/plugin/ui.html", import.meta.url).href);
   await reduced.evaluate(({ spec, tags }: any) => (window as any).FigloGuide.configure(spec, tags), { spec: EFFECTS, tags: [...KNOWN_TAGS] });
   await reduced.click("#tabGuide"); assert.equal(await reduced.textContent("#guidePause"), "Play");
-  console.log("UI preview browser: gradients/tide, full text artwork/gleam, child tags, saved settings, composed effects, hover/press/release, nodim, when, navigation, scrolling, maximize/restore, dots, stale replies and reduced motion passed");
+  console.log("UI preview browser: optional child editor, isolated settings, scoped save/add/remove/value requests, gradients/tide, text artwork/gleam, child interactions, navigation, scrolling, maximize/restore, stale replies and reduced motion passed");
 } finally { await browser.close(); }

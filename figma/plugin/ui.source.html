@@ -58,7 +58,14 @@
       <div class="guide-toolbar"><span id="guideInstruction">Hover or click the UI</span><button id="guideRefresh" class="guide-secondary">Refresh</button><button id="guideReplay" class="guide-secondary">Replay</button><button id="guidePause" class="guide-secondary">Pause</button></div>
       <p id="guideNote" class="guide-note">Select a panel to interact with its tagged children.</p>
     </section>
-    <p class="guide-intro">Find a tag. Add it to a layer to use it in your UI.</p>
+    <details id="guideLayerEditor">
+      <summary>Edit layer tags <span class="guide-optional">Optional</span></summary>
+      <label for="guideLayer">Layer in this panel</label>
+      <select id="guideLayer"><option value="">Choose a layer…</option></select>
+      <div id="guideLayerTags" aria-label="Tags on this layer"></div>
+      <p id="guideLayerNote" class="guide-note">Choose a child to edit its tags. The canvas selection stays on your panel.</p>
+    </details>
+    <p class="guide-intro">The preview uses your layers' existing tags. Browse the guide below, or choose a layer to edit.</p>
     <div class="guide-filters"><input id="guideSearch" type="search" placeholder="Search tags" aria-label="Search tags"><select id="guideCategory" aria-label="Tag category"><option value="">All tags</option></select></div>
     <div id="guideList" aria-label="Tags"></div>
     <div id="guideEmpty" hidden>No tags found. Try another search.</div>
@@ -67,10 +74,10 @@
       <p id="guideDescription"></p>
       <div class="guide-example"><code id="guideExample"></code><button id="guideCopy" class="guide-secondary">Copy</button></div>
       <div id="guideValueRow" hidden><label id="guideValueLabel" for="guideValue"></label><input id="guideValue" type="text" maxlength="80"></div>
-      <details id="guideSettings"><summary>Preview settings</summary><p id="guideSettingsNote" class="guide-note"></p><div id="guideParams"></div><button id="guideReset" class="guide-secondary">Reset defaults</button></details>
+      <details id="guideSettings"><summary id="guideSettingsTitle">Preview settings</summary><p id="guideSettingsNote" class="guide-note"></p><div id="guideParams"></div><button id="guideReset" class="guide-secondary">Reset defaults</button></details>
       <p id="guidePlacement"></p>
-      <button id="guideApply" disabled>Add to selected layer</button>
-      <div id="guideSelection" role="status" aria-live="polite">Select a layer to add this tag.</div>
+      <div id="guideActions" hidden><button id="guideApply" class="guide-secondary" disabled>Save settings</button><button id="guideRemove" class="guide-secondary" hidden>Remove tag</button></div>
+      <div id="guideSelection" role="status" aria-live="polite"></div>
     </section>
   </div>
 <script>

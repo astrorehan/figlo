@@ -242,8 +242,8 @@
     setVisible(value) { this.visible = value; this.stop(); this.start(); }
     play(value) { this.running = value; this.stop(); this.start(); }
     replay() { this.time = 0; this.last = 0; for (const r of this.records) { r.shown = true; r.effective = false; r.hover = r.press = r.locked = false; r.entered = -100; r.e.scrollTop = r.e.scrollLeft = 0; for (const v of r.ripples) v.holder.remove(); r.ripples = []; } this.draw(); }
-    updateTag(tag, values) { for (const r of this.records) if (r.n.tags?.[tag]) r.fx[tag] = { ...r.fx[tag], ...values }; this.draw(); }
-    tagValues(tag) { return this.records.find(r => r.n.tags?.[tag])?.fx[tag]; }
+    updateTag(tag, values, nodeId) { for (const r of this.records) if (r.n.tags?.[tag] && (!nodeId || r.n.id === nodeId)) r.fx[tag] = { ...r.fx[tag], ...values }; this.draw(); }
+    tagValues(tag, nodeId) { return this.records.find(r => r.n.tags?.[tag] && (!nodeId || r.n.id === nodeId))?.fx[tag]; }
     buttonState(state) { for (const r of this.records) if (r.button) { r.locked = state === 'locked'; r.hover = state === 'hover'; r.press = state === 'press'; } this.draw(); }
     destroy() { this.stop(); this.resize.disconnect(); window.removeEventListener('pointerup', this.release); window.removeEventListener('pointercancel', this.release); window.removeEventListener('blur', this.release); }
   }

@@ -1,9 +1,17 @@
   .guide-intro { margin: 0 0 10px; color: var(--figma-color-text-secondary, #666); }
   .guide-filters { display: grid; grid-template-columns: 1fr 112px; gap: 6px; }
-  .guide-filters input, .guide-filters select, #guideValue {
+  .guide-filters input, .guide-filters select, #guideValue, #guideLayer {
     min-width: 0; width: 100%; box-sizing: border-box; font: inherit; color: inherit;
     background: var(--figma-color-bg, #fff); border: 1px solid var(--figma-color-border, #ddd); border-radius: 6px; padding: 7px;
   }
+  #guideLayerEditor { border: 1px solid var(--figma-color-border, #ddd); border-radius: 6px; padding: 8px; margin: 10px 0; }
+  #guideLayerEditor summary { cursor: pointer; font-weight: 600; }
+  .guide-optional { font-size: 10px; font-weight: 400; color: var(--figma-color-text-secondary, #666); margin-left: 6px; }
+  #guideLayerEditor label { display: block; margin: 10px 0 4px; }
+  #guideLayerTags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  #guideLayerTags button { width: auto; padding: 4px 7px; font: 11px ui-monospace, monospace; overflow-wrap: anywhere; background: var(--figma-color-bg-secondary, #eee); color: inherit; }
+  #guideLayerTags button[aria-pressed=true] { outline: 1px solid var(--figma-color-bg-brand, #0d99ff); }
+  #guideActions:not([hidden]) { display: flex; gap: 6px; flex-wrap: wrap; }
   #guideList { display: flex; flex-wrap: wrap; gap: 5px; max-height: 98px; overflow-y: auto; padding: 9px 1px; }
   #guideList button { width: auto; padding: 5px 9px; font: 11px ui-monospace, Consolas, monospace; background: var(--figma-color-bg-secondary, #eee); color: inherit; }
   #guideList button[aria-pressed=true] { background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }

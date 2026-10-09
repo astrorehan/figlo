@@ -39,6 +39,9 @@ function plugin(nodes: any[]) {
   return { messages, figma, events, pageEvents, copies, async preview(requestId = 1, id = nodes[0]?.id) {
     await figma.ui.onmessage({ type: "guide-preview", requestId, id });
     return messages.findLast(m => m.type === "guide-preview");
+  }, async edit(type: string, nodeId: string, tag: string, params: any = {}, value = "", rootId = nodes[0]?.id) {
+    await figma.ui.onmessage({ type, nodeId, rootId, tag, params, value });
+    return messages.findLast(m => m.type === "guide-applied");
   }, async apply(tag: string, params: any = {}, value = "") {
     await figma.ui.onmessage({ type: "guide-apply", tag, params, value });
     return messages.findLast(m => m.type === "guide-applied");
@@ -153,6 +156,54 @@ describe("Tag Guide", () => {
     expect(panel.name).toBe("Figlo Demo");
     expect(panel.children[2].name).toBe("Buy_button_smooth");
     expect(panel.children).toHaveLength(3);
+  });
+  test("lists original descendants for editing, including ignored and baked children", async () => {
+    const panel = demoFrame();
+    panel.children[1].name = '#Card';
+    panel.children[0].name = 'Title_ignore';
+    const result = await plugin([panel]).preview();
+    expect(result.error).toBeUndefined();
+    expect(result.layers).toHaveLength(6);
+    expect(result.layers.find((n: any) => n.id === 'demo:dot')).toMatchObject({ name: 'Dot_pulse', depth: 2, tags: { pulse: true } });
+    expect(result.layers.find((n: any) => n.id === 'demo:title').tags.ignore).toBe(true);
+    expect(result.layers.find((n: any) => n.id === 'demo:card').tags['#']).toBe(true);
+    expect(result.layers.every((n: any) => !n.id.startsWith('clone:'))).toBe(true);
+  });
+  test("saves only the chosen child while the canvas selection stays on the panel", async () => {
+    const panel = demoFrame(), child = panel.children[1].children[0], sibling = panel.children[2];
+    Object.assign(child, layer('Dot_pulse_sway', { pulse: { amp: .2 }, sway: { angle: 8 } }));
+    Object.assign(sibling, layer('Continue_pulse', { pulse: { amp: .15 } }));
+    const p = plugin([panel]);
+    expect((await p.edit('guide-apply', child.id, 'pulse', { amp: .3 })).count).toBe(1);
+    expect(child.data()).toEqual({ pulse: { amp: .3 }, sway: { angle: 8 } });
+    expect(sibling.data()).toEqual({ pulse: { amp: .15 } });
+    expect(panel.name).toBe('Figlo Demo');
+    expect(p.figma.currentPage.selection).toEqual([panel]);
+    expect((await p.edit('guide-apply', child.id, 'when', {}, 'hover|press')).error).toBeUndefined();
+    expect(parseName(child.name).tags.when).toBe('hover|press');
+    expect((await p.edit('guide-remove', child.id, 'pulse')).error).toBeUndefined();
+    expect(parseName(child.name).tags.pulse).toBeUndefined();
+    expect(child.data()).toEqual({ sway: { angle: 8 } });
+    expect(sibling.name).toBe('Continue_pulse');
+  });
+  test("rejects child edits after selection changes or the child leaves the panel", async () => {
+    const panel = demoFrame(), child = panel.children[1].children[0], p = plugin([panel]);
+    const original = child.name;
+    expect((await p.edit('guide-apply', 'outside', 'smooth')).error).toContain('no longer');
+    expect((await p.edit('guide-remove', child.id, 'pulse', {}, '', 'wrong-panel')).error).toContain('changed');
+    expect((await p.edit('guide-apply', child.id, 'pulse', { amp: 999 })).error).toBeTruthy();
+    p.figma.currentPage.selection = [panel.children[2]];
+    expect((await p.edit('guide-apply', child.id, 'smooth')).error).toContain('changed');
+    p.figma.currentPage.selection = [panel]; child.removed = true;
+    expect((await p.edit('guide-remove', child.id, 'pulse')).error).toContain('no longer');
+    expect(child.name).toBe(original);
+    expect(panel.name).toBe('Figlo Demo');
+  });
+  test("adds and removes baking prefixes on a child without touching its parent", async () => {
+    const panel = demoFrame(), child = panel.children[1], p = plugin([panel]);
+    await p.edit('guide-apply', child.id, '#'); expect(child.name).toBe('#Card_frame');
+    await p.edit('guide-remove', child.id, '#'); expect(child.name).toBe('Card_frame');
+    expect(panel.name).toBe('Figlo Demo');
   });
   test("preserves gradient paints and exports text ink outside its layout box", async () => {
     const panel = demoFrame(), title = panel.children[0];

@@ -26,5 +26,6 @@ export function shopPreview() {
     box("toggle", "Toggle details", .84, .77, .2, .08, { tags: { button: true, switch: "Details" }, fill: fill([.22, .5, .53]), radius: 8 }),
     box("missing", "External target", .84, .9, .2, .06, { tags: { button: true, show: "Outside" }, fill: fill([.3, .35, .4]), radius: 6 }),
     buy, scroll, details,
+    box("other-buy", "Other button", .83, .18, .12, .07, { tags: { smooth: true }, fx: { smooth: { hover: 1.08, press: .9 } }, fill: fill([.24, .32, .46]), radius: 6 }),
   ] }) };
 }

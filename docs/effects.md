@@ -18,8 +18,17 @@ visibility and restarts entrances; **Pause** stops the animation clock.
 faint dotted background. **Back to guide** or **Esc** restores the normal window.
 It is the same preview, so its current state survives resizing.
 
-Guide settings adjust layers that already have the chosen tag, for this preview
-only. **Add to selected layer** saves a tag and its settings to the Figma selection.
+The preview works with existing tags; adding one is optional. Open **Edit layer
+tags** and choose a layer inside the selected panel. Its tag chips open their
+settings. Adjust a value to preview it on that child, then **Save settings** to
+keep the change in Figma. Other children with the same tag keep their settings.
+Choose a new tag from the guide and click **Add** to add it to that child, or
+**Remove tag** to remove the current tag. Navigation targets and `_when` states
+can be edited too. The parent remains selected in the Figma canvas.
+
+Without an editing layer chosen, guide settings only adjust the preview's layers
+that already have that tag. Hidden, ignored and baked descendants are listed for
+editing too, but have no separate interaction in the preview.
 Source tags and plugin data are never changed by hovering, clicking or replaying.
 The exporter uses a temporary copy and removes it after rendering, including on
 failure. Baked `_image` layers have no live children, just as after import.

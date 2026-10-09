@@ -915,9 +915,14 @@ function extract(rootNode) {
 // is edited for asset export; it is removed in finally, even on failure.
 async function buildGuideScene(source, isCurrent) {
   const originals = new Map();
+  const layers = [];
   let count = 0;
   function countNodes(node, depth = 0) {
     if (++count > 600 || depth > 40) throw new Error('Select a smaller panel to preview (up to 600 layers).');
+    const meta = parseName(node.name);
+    const tags = { ...meta.tags };
+    if (node.name.startsWith('#')) tags['#'] = true;
+    layers.push({ id: node.id, name: node.name, type: node.type, depth, tags, fx: effectParams(node, meta.tags) || {}, hidden: node.visible === false });
     for (const child of node.children || []) countNodes(child, depth + 1);
   }
   countNodes(source);
@@ -939,7 +944,7 @@ async function buildGuideScene(source, isCurrent) {
       const artwork = source.absoluteRenderBounds || bounds;
       const bytes = await source.exportAsync({ format: 'PNG', useAbsoluteBounds: false, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(artwork.width, artwork.height)) } });
       check(); addImage(source.id, bytes);
-      return { ir: { design: { w: artwork.width, h: artwork.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: artwork.width, ph: artwork.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images };
+      return { ir: { design: { w: artwork.width, h: artwork.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: artwork.width, ph: artwork.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images, layers };
     }
     const transform = source.absoluteTransform;
     const width = source.width, height = source.height;
@@ -987,7 +992,7 @@ async function buildGuideScene(source, isCurrent) {
     }
     remap(ir.root);
     ir.source = { node: source.id, name: source.name };
-    return { ir, images };
+    return { ir, images, layers };
   } finally {
     if (copy && !copy.removed) copy.remove();
   }
@@ -1177,11 +1182,24 @@ function setParam(tag, key, value) {
 }
 
 // Guide previews are local; only this explicit action writes to the document.
+function guideTargets(msg) {
+  const selection = figma.currentPage.selection;
+  if (!selection.length) throw new Error('Select a panel first.');
+  if (msg.nodeId === undefined && msg.rootId === undefined) return selection;
+  if (typeof msg.nodeId !== 'string' || typeof msg.rootId !== 'string' || selection.length !== 1 || selection[0].id !== msg.rootId) throw new Error('The selected panel changed. Choose a layer again.');
+  const pending = [selection[0]];
+  let count = 0;
+  while (pending.length && ++count <= 600) {
+    const node = pending.pop();
+    if (node.id === msg.nodeId && !node.removed) return [node];
+    pending.push(...(node.children || []));
+  }
+  throw new Error('This layer is no longer in the selected panel. Refresh the preview.');
+}
 function applyGuideTag(msg) {
   const tag = msg.tag;
   if (tag !== '#' && !KNOWN_TAGS.has(tag)) throw new Error('Unknown tag.');
-  const selection = figma.currentPage.selection;
-  if (!selection.length) throw new Error('Select a layer first.');
+  const selection = guideTargets(msg);
   const spec = EFFECTS[tag];
   const value = String(msg.value || '').trim();
   if (value.length > 80 || value.includes('_')) throw new Error('Tag values must be at most 80 characters and cannot contain underscores.');
@@ -1225,6 +1243,26 @@ function applyGuideTag(msg) {
       }
     }
   }
+  return selection.length;
+}
+
+function removeGuideTag(msg) {
+  const tag = msg.tag;
+  if (tag !== '#' && !KNOWN_TAGS.has(tag)) throw new Error('Unknown tag.');
+  const targets = guideTargets(msg);
+  for (const node of targets) {
+    if (tag === '#') node.name = node.name.replace(/^#/, '');
+    else {
+      let name;
+      do { name = node.name; node.name = nameWithout(name, tag); } while (name !== node.name);
+      const saved = readFx(node);
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        delete saved[tag];
+        node.setPluginData('fx', Object.keys(saved).length ? JSON.stringify(saved) : '');
+      }
+    }
+  }
+  return targets.length;
 }
 
 figma.ui.onmessage = async msg => {
@@ -1236,13 +1274,14 @@ figma.ui.onmessage = async msg => {
     figma.ui.resize(w, h); return;
   }
   if (msg.type === 'guide-preview') { await sendGuidePreview(msg); return; }
-  if (msg.type === 'guide-apply') {
+  if (msg.type === 'guide-apply' || msg.type === 'guide-remove') {
+    const reply = { type: 'guide-applied', rootId: msg.rootId, nodeId: msg.nodeId, tag: msg.tag, action: msg.type === 'guide-remove' ? 'remove' : 'save' };
     try {
-      applyGuideTag(msg);
+      const count = msg.type === 'guide-remove' ? removeGuideTag(msg) : applyGuideTag(msg);
       sendFxState();
-      figma.ui.postMessage({ type: 'guide-applied', count: figma.currentPage.selection.length });
+      figma.ui.postMessage({ ...reply, count });
     } catch (e) {
-      figma.ui.postMessage({ type: 'guide-applied', error: String(e && e.message || e) });
+      figma.ui.postMessage({ ...reply, error: String(e && e.message || e) });
     }
     return;
   }

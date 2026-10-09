@@ -2,9 +2,14 @@
 // is edited for asset export; it is removed in finally, even on failure.
 async function buildGuideScene(source, isCurrent) {
   const originals = new Map();
+  const layers = [];
   let count = 0;
   function countNodes(node, depth = 0) {
     if (++count > 600 || depth > 40) throw new Error('Select a smaller panel to preview (up to 600 layers).');
+    const meta = parseName(node.name);
+    const tags = { ...meta.tags };
+    if (node.name.startsWith('#')) tags['#'] = true;
+    layers.push({ id: node.id, name: node.name, type: node.type, depth, tags, fx: effectParams(node, meta.tags) || {}, hidden: node.visible === false });
     for (const child of node.children || []) countNodes(child, depth + 1);
   }
   countNodes(source);
@@ -26,7 +31,7 @@ async function buildGuideScene(source, isCurrent) {
       const artwork = source.absoluteRenderBounds || bounds;
       const bytes = await source.exportAsync({ format: 'PNG', useAbsoluteBounds: false, constraint: { type: 'SCALE', value: Math.min(2, 1024 / Math.max(artwork.width, artwork.height)) } });
       check(); addImage(source.id, bytes);
-      return { ir: { design: { w: artwork.width, h: artwork.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: artwork.width, ph: artwork.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images };
+      return { ir: { design: { w: artwork.width, h: artwork.height }, root: { id: source.id, name: meta.name, kind: 'image', image: source.id, x: .5, y: .5, w: 1, h: 1, pw: artwork.width, ph: artwork.height, tags: meta.tags, fx: effectParams(source, meta.tags) }, warnings: [] }, images, layers };
     }
     const transform = source.absoluteTransform;
     const width = source.width, height = source.height;
@@ -74,7 +79,7 @@ async function buildGuideScene(source, isCurrent) {
     }
     remap(ir.root);
     ir.source = { node: source.id, name: source.name };
-    return { ir, images };
+    return { ir, images, layers };
   } finally {
     if (copy && !copy.removed) copy.remove();
   }

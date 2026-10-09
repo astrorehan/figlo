@@ -46,9 +46,10 @@ frame stays still. Navigation tags can open, close or switch layers inside that
 frame. **Maximize** opens the preview across a larger plugin window; **Esc** returns
 to the guide. The preview has a faint dotted background.
 
-Browsing tags does not add them to the preview. Settings affect children that
-already have that tag. **Add to selected layer** saves the tag and settings to
-your Figma selection.
+Adding tags is optional. Open **Edit layer tags** and choose a child to see its
+tags and settings while keeping the whole panel selected. Changes preview on
+that child; **Save settings** keeps them in Figma. You can also add or remove
+tags there. Browsing the guide does not change your layers.
 
 Restarting the relay changes its pairing token unless you set `FIGLO_TOKEN`.
 Paste the new token into both panels. The token is private; the export code is
