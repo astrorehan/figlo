@@ -134,6 +134,7 @@ describe("Tag Guide", () => {
   });
   test("requests a refresh when the active page artwork changes", async () => {
     const a = node("FRAME", "a", "Panel", 0, 0, 100, 100); const p = plugin([a]); await p.preview();
+    a.name = 'Updated panel';
     p.pageEvents.nodechange({ nodeChanges: [{ node: a }] });
     expect(p.messages.at(-1).type).toBe("guide-preview-dirty");
   });
@@ -175,7 +176,18 @@ describe("Tag Guide", () => {
     const before = p.messages.length;
     p.pageEvents.nodechange({ nodeChanges: [{ node: { id: "temporary", removed: true } }] });
     expect(p.messages.length).toBe(before);
+    a.children[1].children[0].name = 'Updated dot_pulse';
     p.pageEvents.nodechange({ nodeChanges: [{ node: a.children[1].children[0] }] });
+    expect(p.messages.at(-1).type).toBe("guide-preview-dirty");
+  });
+  test("does not refresh for a temporary layout reflow that has already settled", async () => {
+    const a = demoFrame(); const p = plugin([a]); await p.preview();
+    const before = p.messages.length, width = a.absoluteBoundingBox.width;
+    a.absoluteBoundingBox.width /= 2; a.absoluteBoundingBox.width = width;
+    p.pageEvents.nodechange({ nodeChanges: [{ node: a }] });
+    expect(p.messages.length).toBe(before);
+    a.absoluteBoundingBox.width += 20;
+    p.pageEvents.nodechange({ nodeChanges: [{ node: a }] });
     expect(p.messages.at(-1).type).toBe("guide-preview-dirty");
   });
   test("bounds expanded window sizes and restores the guide dimensions", async () => {

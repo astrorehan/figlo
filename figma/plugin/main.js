@@ -76,6 +76,18 @@ function sendFxState() { figma.ui.postMessage(fxState()); }
 // Scene previews are serialized because asset export uses temporary nodes.
 let guidePreviewRequest = 0, guidePreviewQueue = Promise.resolve();
 let guideSourceIds = new Set();
+let guideSignature = '';
+function sceneSignature(root) {
+  const fields = ['name', 'type', 'visible', 'opacity', 'width', 'height', 'rotation', 'absoluteBoundingBox', 'relativeTransform', 'fills', 'strokes', 'strokeWeight', 'strokeAlign', 'effects', 'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'clipsContent', 'isMask', 'blendMode', 'layoutMode', 'layoutWrap', 'layoutPositioning', 'layoutSizingHorizontal', 'layoutSizingVertical', 'itemSpacing', 'counterAxisSpacing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'overflowDirection', 'characters', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'textCase', 'textDecoration', 'textAutoResize', 'textAlignHorizontal', 'textAlignVertical'];
+  const rows = [], pending = [root];
+  while (pending.length && rows.length <= 600) {
+    const n = pending.pop(), row = { id: n.id, fx: n.getPluginData('fx') };
+    for (const key of fields) if (key in n) row[key] = n[key];
+    if (n.type === 'TEXT' && (typeof n.fills === 'symbol' || typeof n.fontName === 'symbol')) row.segments = n.getStyledTextSegments(['fills', 'fontName', 'fontSize']);
+    rows.push(row); pending.push(...(n.children || []));
+  }
+  return JSON.stringify(rows);
+}
 function sendGuidePreview(msg) {
   const request = ++guidePreviewRequest;
   const run = async () => {
@@ -87,6 +99,7 @@ function sendGuidePreview(msg) {
     while (pending.length && guideSourceIds.size <= 600) { const n = pending.pop(); guideSourceIds.add(n.id); pending.push(...(n.children || [])); }
     const reply = { type: 'guide-preview', requestId: msg.requestId, id: msg.id };
     try {
+      guideSignature = sceneSignature(node);
       const scene = await buildGuideScene(node, isCurrent);
       if (isCurrent() && !node.removed) figma.ui.postMessage({ ...reply, name: node.name, ...scene });
     } catch (e) {
@@ -106,7 +119,16 @@ const guideDirty = event => {
     if (change.node.removed) return false;
     for (let n = change.node.parent; n; n = n.parent) if (guideSourceIds.has(n.id)) return true;
     return false;
-  })) figma.ui.postMessage({ type: 'guide-preview-dirty' });
+  })) {
+    const root = figma.currentPage.selection.length === 1 && figma.currentPage.selection[0];
+    if (!root || root.removed) return;
+    // Cloning inside auto-layout can briefly reflow its source. Figma batches
+    // those notifications; refresh only if the source's final design changed.
+    const current = sceneSignature(root);
+    if (current === guideSignature) return;
+    guideSignature = current;
+    figma.ui.postMessage({ type: 'guide-preview-dirty' });
+  }
 };
 async function watchGuidePage() {
   const page = figma.currentPage;
