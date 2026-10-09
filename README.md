@@ -46,17 +46,24 @@ a separate value.
 
 ## Using AI
 
-You can connect a local CLI client to Studio MCP to inspect and edit UI imported
-with Figlo. You still export and import through the plugin panels today.
+You can ask your AI client to import a frame for you:
 
-Automatic import isn't ready yet. In our Studio MCP test, Luau execution worked,
-but starting an Undo recording didn't. Figlo needs a way to run import requests
-inside its Studio plugin, plus an automated Figma export path, before a single
-prompt can handle the whole import.
+> Import this Figma frame into my Roblox Studio place using Figlo: <frame URL>.
 
-The browser export script is available for development. It depends on Figma's
-editor exposing the `figma` global; headless Chrome hasn't been tested.
-See [Studio MCP setup and test results](docs/studio-mcp.md).
+Your client needs browser access to the Figma editor, a shell to run Figlo's
+export tools, and Studio MCP to call the importer. With those connections and
+Figlo's modules already set up, it can export the frame, send it to the local
+relay, import it in Studio and check the result without you clicking the plugin
+buttons or copying an export code.
+
+This browser-to-Studio workflow has been used with the earlier FrameFig version.
+The current relay also requires a pairing token. A CLI client can use the same
+workflow if it has the required tools; the browser is one of those tools.
+
+See [the automation guide](docs/studio-mcp.md) for the commands, importer call
+and status checks. Headless Chrome hasn't been tested. The direct importer
+doesn't create the plugin's Undo recording, so that path doesn't offer the same
+rollback behavior as importing through the panel.
 
 ## Update an existing import
 

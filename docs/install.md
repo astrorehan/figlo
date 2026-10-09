@@ -45,7 +45,7 @@ The export code is separate from that token. Never put the token in public issue
 ## Source builds and model access
 
 To build the plugins yourself, also install Rokit 1.2.0, then run `rokit install`
-and `bun run build`. See [Studio MCP integration](studio-mcp.md) for importing
-through a model's existing Studio connection. That route is experimental.
+and `bun run build`. See [AI import](studio-mcp.md) for the browser export script
+and importer calls through an existing Studio connection.
 
 See [troubleshooting](troubleshooting.md) if fonts, images or permissions fail.

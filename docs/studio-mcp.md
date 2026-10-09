@@ -1,102 +1,111 @@
-# Import through Studio MCP (experimental)
+# Import with AI
 
-Figlo's Luau importer can be invoked through a Studio MCP connection that exposes
-Luau execution in edit mode. No separate Figlo MCP server is required. The model
-uses the same importer as the plugin, rather than reconstructing the design itself.
+Figlo's browser export script and Luau importer can be called by an AI client.
+The client needs access to the Figma editor, local shell commands and Studio MCP.
+Once those are connected, it can handle the export code itself and call the
+importer without using the plugin buttons.
 
-This is a documented integration path, not a verified end-to-end feature yet.
-Studio MCP execution contexts vary: HTTP access, Studio user identity, asset upload
-permissions and ChangeHistoryService recording must be tested in the chosen client.
-The local plugin remains the supported alpha import interface.
+The browser-to-Studio workflow was used with the earlier FrameFig version.
+When updating that automation, include the current relay's pairing token.
 
-### Observed bundled Studio MCP limitation
+## Set up once
 
-On 9 October 2026, a connected Studio in edit mode successfully executed Luau,
-queried Studio user identity and created/destroyed a temporary EditableImage.
-However, `ChangeHistoryService:TryBeginRecording` returned no recording, and
-`InsertService:LoadLocalAsset` was rejected for missing RobloxScript capability.
-The guarded import recipe below therefore cannot proceed in that tested context.
-Use the local plugin panel for imports until a plugin-side execution bridge is
-implemented and verified. MCP can still inspect the imported instance tree.
-This check did not upload images or modify game objects.
+- Sign in to Figma and open the design in an editor session. The browser tool
+  must be able to execute JavaScript there and access the `figma` global.
+- Connect Studio MCP to the intended place and stay in edit mode.
+- Sync `studio/src` into `ServerStorage.FigloModules` with Rojo or Argon.
+  Keep `Runtime/Effects` and the `Client` LocalScript in their original structure.
+- Run `bun run relay`. Give the local shell caller the same private `FIGLO_TOKEN`
+  used by the relay. Enable the place's HTTP requests and the asset permissions
+  needed for image uploads.
 
-## Local CLI clients on Windows
+A local CLI client can use this setup. Add Studio's bundled MCP as a local stdio
+server using `powershell.exe` with these arguments on Windows:
 
-Both Codex CLI and Claude Code can connect to a local stdio MCP server. Studio
-must remain open and have its MCP connection enabled. With a checkout at
-`D:/figlo`, register Studio's bundled MCP executable using the launcher:
-
-```sh
-codex mcp add roblox-studio -- powershell.exe -NoProfile -NonInteractive -File D:/figlo/tools/studio_mcp.ps1
-claude mcp add --transport stdio roblox-studio -- powershell.exe -NoProfile -NonInteractive -File D:/figlo/tools/studio_mcp.ps1
+```json
+["-NoProfile", "-NonInteractive", "-File", "D:/figlo/tools/studio_mcp.ps1"]
 ```
 
-Replace the checkout path with your own. Register only the client you use, and
-skip registration if a working Studio MCP is already configured. Restart the
-client session and ask it to list connected Studios before importing. The
-launcher finds the installed Studio MCP through Studio's Windows registry entry;
-it is Windows-specific. See the official
-[Codex MCP guide](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
-[Claude Code MCP guide](https://code.claude.com/docs/en/mcp).
+Replace the checkout path. The launcher finds Studio's installed MCP executable
+through its Windows registry entry. Skip this if your client already has a
+working Studio connection. Browser tools are configured separately.
 
-The browser is optional on the Studio side. Figma extraction still requires
-access to the Figma document: the supported alpha path is its development plugin.
-The optional console driver needs a Figma editor session that actually exposes
-the `figma` global. Headless Chrome is not a tested install/export path and cannot
-create that API merely by opening the page. Figma's supported Plugin API runs
-inside its editor's plugin sandbox; see
-[How plugins run](https://developers.figma.com/docs/plugins/how-plugins-run/).
+## Export the frame
 
-## Prepare a place
+1. Build the browser script with `bun tools/build_page.ts`.
+2. Execute `out/figlo-page.min.js` in the Figma editor through the browser tool.
+3. Run `await window.__ffrun("<node ID>")`. Use Figma's actual node ID, such as
+   `123:456`.
+4. Read `window.__ffstatus`. Continue only when `done` is true and `error` is empty.
+5. Save `window.__ffb64` to a local export file. It contains the packed export,
+   including image pixels, prefixed with `FFGZ:`.
+6. Send it to the relay from the shell:
 
-1. Install Figlo and export a frame as described in [installation](install.md).
-2. Connect the model's Studio MCP to the intended place and remain in edit mode.
-3. Sync `studio/src` into `ServerStorage.FigloModules` with Rojo or Argon. Preserve
-   the folder structure, including `Runtime/Effects` and the `Client` LocalScript.
-   Do not rewrite ModuleScript Source through MCP when workspace sources exist.
-4. For an isolated test, build the included test place with
-   `rojo build tools/verification.project.json -o build/FigloVerification.rbxl`,
-   open it in Studio, and connect that instance. This place contains the modules;
-   it has no imported UI until an import is performed.
+```sh
+# FIGLO_TOKEN must already be set privately for this process.
+bun tools/push_clipboard.ts /path/to/export.txt
+```
 
-## Invoke the importer
+Despite its name, this command reads the supplied file without using the
+clipboard. It prints the six-character export code; the client uses that code
+in the next step. Keep private design exports out of the repository.
 
-Use this template with an actual export code and the private relay token. Pass
-the token privately for the current session; never commit it or include it in
-issue reports. Giving it to an external model may put it in that client's history.
+This script depends on an editor session exposing the `figma` global. If it
+isn't available, that browser route cannot export the document. Headless Chrome
+hasn't been tested. See [Figma's plugin environment](https://developers.figma.com/docs/plugins/how-plugins-run/).
+
+## Import in Studio
+
+Use Studio MCP's Luau execution tool in edit mode. Pass the export code and
+private pairing token to the importer. Do not write module Source through MCP;
+keep source changes in workspace files and sync them.
+
+For imports that may exceed the tool's time limit, start a background import:
 
 ```lua
 assert(not game:GetService("RunService"):IsRunning(), "Import in edit mode")
 local modules = game.ServerStorage:FindFirstChild("FigloModules")
-assert(modules, "Sync Figlo modules from the workspace first")
-local fresh = modules:Clone() -- fresh require cache after source synchronization
-fresh.Parent = game.ServerStorage
-local ok, result = pcall(function()
-    local importer = require(fresh.Importer)
-    local action = require(fresh.ImportAction)
-    local gui, warnings = action.run(game:GetService("ChangeHistoryService"), function()
-        return importer.run("ABCDEF", {
-            token = "<private pairing token>",
-            parent = game.StarterGui,
-            runtime = fresh.Runtime,
-            client = fresh.Client,
-        })
-    end)
-    return { path = gui:GetFullName(), warnings = warnings }
-end)
-fresh:Destroy()
-if not ok then error(result) end
-return result
+assert(modules, "Sync Figlo modules first")
+local session = modules:Clone() -- fresh require cache after syncing
+session.Name = "FigloSession_" .. game:GetService("HttpService"):GenerateGUID(false)
+session.Parent = game.ServerStorage
+
+require(session.Importer).start("ABCDEF", {
+    token = "<private pairing token>",
+    parent = game.StarterGui,
+    runtime = session.Runtime,
+    client = session.Client,
+    status = session,
+})
+return session:GetFullName()
 ```
 
-The wrapper requires an Undo recording before importing. If the execution context
-cannot record or upload images, stop and use the Figlo plugin panel; do not bypass
-the check. Asset uploads remain on Roblox even if place edits are undone.
+Keep the returned session path. Poll that folder's `FigloStatus` and `FigloLog`
+through Studio MCP. A status of `done` means the importer finished;
+`failed: ...` reports an error. Read `FigloResult` for the imported container
+path and `FigloWarnings` for warnings. Do not report success while it is running.
+Destroy the temporary session folder only after the background import has ended.
 
-A useful request to the model is: "Check the connected Studio instance and edit
-mode. Import this Figlo export with the synced modules and Undo wrapper, report
-warnings, then inspect the generated StarterGui. Do not modify module Source."
+`Importer.run(code, opts)` is also available for a synchronous call.
+See [API options](api.md) for group ownership, cache reuse and page imports.
 
-After import, inspect the UI in Play and on different screen sizes, and save the
-place. Figma selection/export still uses the Figma plugin. This integration does
-not give Studio MCP access to Figma or promise identical rendering.
+Direct importer calls do not create an Undo recording. The plugin panel uses
+`ImportAction` to record and cancel failed place edits. Use that wrapper only
+where recording is available; it is not a prerequisite of `Importer.run` or
+`Importer.start`. Uploaded images are not reversed by Undo.
+
+## Check the result
+
+Inspect the path returned in `FigloResult`, read the warnings, and check the UI
+in Play at the intended screen sizes. An import completing does not guarantee
+that fonts, images or layout render exactly like Figma. Save the place to retain
+the imported objects.
+
+## What was checked here
+
+On 9 October 2026, the connected Studio MCP executed Luau, read Studio user
+identity and created/destroyed a temporary EditableImage. It could not start an
+Undo recording or load a local model with `LoadLocalAsset`. Those results limit
+the optional wrapper and file-loading method; they do not establish that direct
+import is unavailable. An end-to-end browser export and direct import of the
+current secured alpha has not been repeated in this session.

@@ -11,7 +11,7 @@
 | Text differs from Figma | Check font availability, fallback warnings, viewport size and text wrapping. See compatibility limits. |
 | Old code runs after source sync | Studio caches `require`. Require a fresh clone of the complete module Folder. |
 | Import as page does nothing | Select the imported ScreenGui, not its root Frame. |
-| Cannot start Undo recording | Finish the other plugin operation or recording, then retry. No import is started without an Undo recording. |
+| Cannot start Undo recording | The plugin and `ImportAction` wrapper require a recording. Finish other recordings and retry. Direct `Importer.run`/`start` calls do not use this wrapper and do not provide its recorded rollback. |
 | Button is silent | Default audio is off. Set an audio ID your experience has permission to use in Effects. |
 | Browser-console export fails | Use the Figma desktop development plugin. The optional browser path depends on an available `figma` global and browser clipboard permissions. |
 

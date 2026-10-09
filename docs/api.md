@@ -25,7 +25,8 @@ dimensions and owner. Old hash-only cache keys are not reused.
 
 `Importer.start(code, opts)` runs in a background thread and writes `FigloStatus`,
 `FigloLog`, `FigloResult` and `FigloWarnings` to `opts.status` or the importer folder.
-Direct callers must provide their own Undo recording; the plugin uses `ImportAction`.
+Direct calls do not create an Undo recording. Callers that need recorded rollback
+can use `ImportAction` in a context that supports it, as the plugin does.
 Studio caches `require`, so after syncing modules require a fresh clone of their entire
 Folder to use the new source.
 
