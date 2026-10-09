@@ -69,20 +69,9 @@
   const el = id => document.getElementById(id);
   const make = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
   let spec = {}, known = new Set(), selected = 'smooth', values = {}, selection = { count: 0, tags: {} };
-  let visible = false, playing = !matchMedia('(prefers-reduced-motion: reduce)').matches, raf = 0, last = 0, time = 0;
-  let hover = false, press = false, point = { x: 0, y: 0 }, stateOverride = '', sample = null, art = null, band = null, stateText = null;
-  let clickTime = -100, enterTime = -100, ripple = null, imported = false, width = 160, fadeValue = 1;
-  let snapshot = null, snapshotUrl = '', previewError = '', previewTimer = 0, requestId = 0;
-  const previewNotes = {
-    goto: 'Navigation targets run after import in Roblox.', show: 'Showing another layer runs after import in Roblox.',
-    hide: 'Closing a layer or ScreenGui runs after import in Roblox.', switch: 'Toggling another layer runs after import in Roblox.',
-    txt: 'Text fitting runs after import. This preview keeps your Figma text.',
-    stagger: 'Child entrances run after import. This preview shows the selected container.',
-    scroll: 'Scrolling runs after import. This preview shows the visible frame.',
-    stack: 'Layout uses your frame’s children after import.', tiles: 'Grid layout uses your frame’s children after import.',
-    tide: 'Gradient animation runs after import. This preview keeps your Figma fill.',
-    drift: 'Tiled-image movement runs after import. This preview keeps your Figma fill.',
-  };
+  let visible = false, expanded = false, preview = null, assets = new Map(), savedScroll = 0;
+  let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let previewError = '', previewTimer = 0, requestId = 0, sceneData = null;
   const valueDefaults = { when: 'hover', goto: 'Details', show: 'Details', hide: '', switch: 'Details' };
   for (const category of Object.keys(groups)) { const option = make('option', '', category); option.value = category; el('guideCategory').append(option); }
 
@@ -94,7 +83,7 @@
     el('guideList').replaceChildren();
     el('guideEmpty').hidden = matches.length !== 0;
     el('guideDetail').hidden = matches.length === 0;
-    if (!matches.length) { stop(); return; }
+    if (!matches.length) return;
     if (!matches.some(e => e.tag === selected)) choose(matches[0].tag);
     for (const entry of matches) {
       const button = make('button', '', entry.tag === '#' ? '# prefix' : '_' + entry.tag);
@@ -102,7 +91,6 @@
       button.onclick = () => { choose(entry.tag); list(); };
       el('guideList').append(button);
     }
-    start();
   }
 
   function example() {
@@ -120,15 +108,16 @@
     for (const [key, p] of Object.entries(definitions)) {
       const row = make('div', 'param'), label = make('label', '', p.label), input = make('input');
       input.id = 'guide-param-' + key; label.htmlFor = input.id;
+      input.disabled = !matchingNodes(selected).length;
       input.type = p.type === 'text' ? 'text' : 'range'; input.value = values[key];
       row.append(label, input);
       if (p.type !== 'text') {
         input.min = p.min; input.max = p.max; input.step = p.step;
         input.value = values[key];
         const output = make('output', '', values[key]); output.htmlFor = input.id; row.append(output);
-        input.oninput = () => { values[key] = Number(input.value); output.value = input.value; draw(); };
+        input.oninput = () => { values[key] = Number(input.value); output.value = input.value; preview?.updateTag(selected, values); };
       } else {
-        input.oninput = () => { values[key] = input.value; draw(); };
+        input.oninput = () => { values[key] = input.value; preview?.updateTag(selected, values); };
         if (/Sound$/.test(key)) {
           input.title = 'Saved when applied. Audio is not played in this preview.';
           row.append(make('small', '', 'Audio plays in Roblox, not in this preview.'));
@@ -138,150 +127,57 @@
     }
   }
 
+  function matchingNodes(tag) {
+    const out = [];
+    function visit(n) { if (n.tags?.[tag]) out.push(n); for (const c of n.children || []) visit(c); }
+    if (sceneData) visit(sceneData.ir.root);
+    return out;
+  }
   function choose(tag) {
-    stop(); selected = tag; time = 0; hover = press = false; stateOverride = ''; point = { x: 0, y: 0 };
-    imported = false; width = snapshot ? snapshot.width : 160; fadeValue = 1; clickTime = enterTime = -100;
-    const entry = catalogue.find(e => e.tag === tag);
-    values = Object.fromEntries(Object.entries(spec[tag]?.params || {}).map(([k, p]) => [k, p.def]));
+    selected = tag;
+    const entry = catalogue.find(e => e.tag === tag), first = matchingNodes(tag)[0];
+    values = Object.fromEntries(Object.entries(spec[tag]?.params || {}).map(([k, p]) => [k, preview?.tagValues(tag)?.[k] ?? first?.fx?.[tag]?.[k] ?? p.def]));
     el('guideTitle').textContent = tag === '#' ? '# prefix' : '_' + tag;
     el('guideGroup').textContent = entry.category;
     el('guideDescription').textContent = description(entry);
     el('guidePlacement').textContent = entry.placement;
     el('guideValueRow').hidden = !spec[tag]?.value;
     el('guideValueLabel').textContent = spec[tag]?.value || '';
-    el('guideValue').value = valueDefaults[tag] ?? '';
-    example(); params(); scene(); tryControls(); updateSelection(); draw(); start();
+    el('guideValue').value = typeof first?.tags[tag] === 'string' ? first.tags[tag] : valueDefaults[tag] ?? '';
+    example(); params(); updateSelection();
+    const matches = matchingNodes(tag);
+    for (const input of el('guideParams').querySelectorAll('input')) input.disabled = !matches.length;
+    el('guideSettingsNote').textContent = matches.length ? 'Preview settings for ' + matches.length + (matches.length === 1 ? ' tagged layer.' : ' tagged layers.') : 'No layer in this frame has this tag yet.';
+    el('guideReset').disabled = !matches.length;
   }
-
-  function buttonState() { return stateOverride || (press ? 'press' : hover ? 'hover' : 'rest'); }
-  function bindPointer(target) {
-    target.onpointerenter = () => { hover = true; enterTime = time; draw(); };
-    target.onpointerleave = () => { hover = press = false; point = { x: 0, y: 0 }; draw(); };
-    target.onpointermove = e => { const r = target.getBoundingClientRect(); point = { x: (e.clientX - r.left) / r.width - .5, y: (e.clientY - r.top) / r.height - .5 }; draw(); };
-    target.onpointerdown = e => { press = true; pointFromClick(e); draw(); };
-    target.onpointerup = target.onpointercancel = () => { press = false; draw(); };
-    target.onfocus = () => { hover = true; enterTime = time; draw(); };
-    target.onblur = () => { hover = press = false; draw(); };
-    target.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { press = true; draw(); } };
-    target.onkeyup = () => { press = false; draw(); };
-    target.onclick = e => { if (e.detail === 0) pointFromClick(); clicked(); };
+  function clearScene() {
+    preview?.destroy(); preview = null;
+    for (const asset of assets.values()) URL.revokeObjectURL(asset.url);
+    assets = new Map(); sceneData = null;
   }
-  function pointFromClick(e) {
-    clickTime = time;
-    if (ripple) ripple.remove();
-    if (selected !== 'splash') return;
-    const r = sample.getBoundingClientRect(); ripple = make('span', 'guide-ripple');
-    ripple.style.left = (e ? e.clientX - r.left : r.width / 2) + 'px'; ripple.style.top = (e ? e.clientY - r.top : r.height / 2) + 'px'; sample.append(ripple);
-  }
-  function clicked() { draw(); }
-
-  function clearSnapshot() {
-    if (snapshotUrl) URL.revokeObjectURL(snapshotUrl);
-    snapshotUrl = ''; snapshot = null;
+  function placeholder() {
+    const stage = el('guideStage'); stage.replaceChildren();
+    const message = previewError || (selection.count === 1 ? 'Loading selected UI…' : selection.count > 1 ? 'Select one frame to preview its UI.' : 'Select a frame to preview its UI.');
+    stage.append(make('p', 'guide-placeholder', message)); stage.setAttribute('aria-busy', String(selection.count === 1 && !previewError));
+    el('guideNote').textContent = 'Select a panel to interact with its tagged children.';
   }
   function refresh() {
     clearTimeout(previewTimer);
     const next = ++requestId;
     if (!visible || selection.count !== 1) return;
-    previewTimer = setTimeout(() => parent.postMessage({ pluginMessage: { type: 'guide-preview', requestId: next, id: selection.id } }, '*'), 120);
+    previewTimer = setTimeout(() => parent.postMessage({ pluginMessage: { type: 'guide-preview', requestId: next, id: selection.id } }, '*'), 160);
   }
-  function fitSnapshot() {
-    if (!sample || !snapshot) return;
-    const scale = Math.min(1, Math.max(1, el('guideStage').clientWidth - 56) / snapshot.pixelWidth, 112 / snapshot.pixelHeight);
-    snapshot.width = snapshot.pixelWidth * scale;
-    snapshot.height = snapshot.pixelHeight * scale;
-    sample.style.width = snapshot.width + 'px'; sample.style.height = snapshot.height + 'px';
-  }
-  function scene() {
-    const stage = el('guideStage'); stage.replaceChildren(); sample = art = band = stateText = ripple = null;
-    if (!snapshot) {
-      const message = previewError || (selection.count === 1 ? 'Loading selected layer…' : selection.count > 1 ? 'Select one frame or layer to preview it.' : 'Select a frame or layer to preview it.');
-      stage.append(make('p', 'guide-placeholder', message)); stage.setAttribute('aria-busy', String(selection.count === 1 && !previewError));
-      el('guideNote').textContent = 'The preview uses your selected layer.';
-      return;
-    }
-    stage.setAttribute('aria-busy', 'false');
-    sample = make('button', 'guide-sample guide-selection');
-    sample.setAttribute('aria-label', 'Preview of ' + snapshot.name);
-    art = make('img', 'guide-art'); art.src = snapshotUrl; art.alt = snapshot.name; art.draggable = false;
-    sample.append(art); fitSnapshot();
-    if (['sheen', 'shiny', 'gleam'].includes(selected)) {
-      band = make('span', 'guide-band'); band.style.maskImage = 'url("' + snapshotUrl + '")'; band.style.maskSize = '100% 100%'; sample.append(band);
-    }
-    if (selected === 'splash') sample.style.overflow = 'hidden';
-    if (selected === 'ignore' && imported) sample.hidden = true;
-    bindPointer(sample); stage.append(sample);
-    if (['button', 'smooth', 'when', 'nodim', ...groups.Pointer].includes(selected)) {
-      stateText = make('div', 'guide-state', 'rest'); stage.append(stateText);
-    }
-    if (selected === 'ignore' && imported) stage.append(make('p', 'guide-placeholder', 'This layer will be left out of the import.'));
-    el('guideNote').textContent = previewNotes[selected] || (selected === 'nodim' ? 'This layer stays bright. Its parent button supplies the state in Roblox.' : 'Previewing ' + snapshot.name + '. Your design stays unchanged.');
-  }
-
-  function tryControls() {
-    el('guideTryControls').replaceChildren();
-    const row = (title, input) => { const wrap = make('div', 'guide-try'); const label = make('label', '', title); input.id = 'guide-try-input'; label.htmlFor = input.id; wrap.append(label, input); el('guideTryControls').append(wrap); };
-    if (['when', 'button', 'smooth', 'nodim'].includes(selected)) {
-      const input = make('select'); for (const name of ['Pointer', 'rest', 'hover', 'press', 'locked', 'active']) { const o = make('option', '', name); o.value = name === 'Pointer' ? '' : name; input.append(o); }
-      input.onchange = () => { stateOverride = input.value; draw(); }; row('Button state', input);
-    } else if (snapshot && (selected === 'ratio' || selected === 'group')) {
-      const input = make('input'); input.type = 'range'; input.min = selected === 'ratio' ? Math.max(1, snapshot.width * .25) : 0; input.max = selected === 'ratio' ? snapshot.width : 1; input.step = selected === 'ratio' ? 1 : .05; input.value = selected === 'ratio' ? width : fadeValue;
-      input.oninput = () => { if (selected === 'ratio') width = Number(input.value); else fadeValue = Number(input.value); draw(); }; row(selected === 'ratio' ? 'Preview width' : 'Opacity', input);
-    }
-    const category = catalogue.find(e => e.tag === selected).category;
-    el('guideInstruction').textContent = ['button', 'smooth', 'when', 'nodim', ...groups.Pointer].includes(selected) ? 'Hover, move, or press your layer' : category === 'Entrance' && !previewNotes[selected] ? 'Replay the entrance' : previewNotes[selected] ? 'Selected layer' : 'Change settings below';
-    el('guideReplay').textContent = !snapshot ? 'Refresh' : selected === 'ignore' ? (imported ? 'Show layer' : 'Preview import') : previewNotes[selected] || category === 'Structure' ? 'Refresh' : 'Replay';
-    el('guidePause').hidden = !needsClock();
-    pauseLabel();
-  }
-
-  function draw() {
-    if (!sample || !visible || el('guideDetail').hidden) return;
-    const v = values, t = time, state = buttonState(), hovered = ['hover', 'press'].includes(state), pressed = state === 'press';
-    let x = 0, y = 0, angle = 0, sx = 1, sy = 1, opacity = 1;
-    const sine = Math.sin(t * Math.PI * 2 * (v.rate || 1));
-    if (['button', 'smooth'].includes(selected) && art) art.style.filter = 'brightness(' + (pressed ? v.pressDim ?? .62 : hovered ? v.hoverDim ?? .8 : 1) + ')';
-    if (selected === 'smooth') { sx = sy = pressed ? v.press : hovered ? v.hover : 1; sample.style.transition = 'transform ' + v.time + 's ease-out'; }
-    if (selected === 'spin') angle = t * v.speed;
-    if (selected === 'rays') { angle = snapshot.pixelWidth > snapshot.pixelHeight * 2 ? Math.sin(t * Math.abs(v.speed) * Math.PI / 180) * 8 : t * v.speed; sx = sy = 1 + sine * v.amp; }
-    if (selected === 'pulse') sx = sy = 1 + sine * v.amp;
-    if (selected === 'float') y = sine * v.amp * sample.offsetHeight;
-    if (selected === 'sway') angle = sine * v.angle;
-    if (selected === 'wobble') { sx = 1 + sine * v.amp; sy = 1 - sine * v.amp; }
-    if (selected === 'blink') { const beat = Math.pow((1 + sine) / 2, 4); sx = sy = v.min + (1 - v.min) * beat; opacity = 1 - v.fade * (1 - beat); }
-    if (selected === 'wiggle' || selected === 'jitter') {
-      const phase = t % v.every, decay = phase < v.time ? 1 - phase / v.time : 0;
-      if (selected === 'wiggle') angle = Math.sin(phase * 48) * v.angle * decay;
-      else { x = Math.sin(phase * 97) * v.amount * sample.offsetHeight * decay; y = Math.cos(phase * 71) * v.amount * sample.offsetHeight * decay; }
-    }
-    if (selected === 'halo') { const k = v.low + (v.high - v.low) * (sine + 1) / 2; const color = /^#?[0-9a-f]{6}$/i.test(v.color) ? '#' + v.color.replace('#', '') : '#ffffff'; sample.style.boxShadow = '0 0 ' + v.size * 2 + 'px ' + v.size / 2 + 'px ' + color + Math.round(k * 255).toString(16).padStart(2, '0'); }
-    if (selected === 'lift' && hovered) y = -v.amount * sample.offsetHeight;
-    if (selected === 'tip' && hovered) angle = point.x * v.angle * 2;
-    if (selected === 'pull' && hovered) { x = point.x * v.strength * sample.offsetWidth; y = point.y * v.strength * sample.offsetHeight; }
-    if (groups.Pointer.includes(selected) && selected !== 'splash' && selected !== 'sheen') sample.style.transition = 'transform ' + v.time + 's ease-out';
-    if (band) {
-      const elapsed = selected === 'sheen' ? t - enterTime : t % (v.time + (v.cooldown || 0));
-      const progress = elapsed / v.time;
-      sample.style.setProperty('--band-x', progress >= 0 && progress <= 1 ? (-500 + progress * 1100) + '%' : '-500%');
-      sample.style.setProperty('--band-width', v.width * 100 + '%'); sample.style.setProperty('--band-opacity', v.opacity ?? .9); sample.style.setProperty('--band-angle', (v.angle || 0) + 'deg');
-    }
-    if (ripple) { const p = Math.min(1, (t - clickTime) / v.time); ripple.style.transform = 'scale(' + (1 + p * 24) + ')'; ripple.style.opacity = v.opacity * (1 - p); ripple.style.background = /^#?[0-9a-f]{6}$/i.test(v.color) ? '#' + v.color.replace('#', '') : '#ffffff'; }
-    const entrance = Math.min(1, t / (v.time || .3)), eased = 1 - Math.pow(1 - entrance, 3);
-    if (selected === 'pop') sx = sy = v.from + (1 - v.from) * (eased + Math.sin(entrance * Math.PI) * .15);
-    if (selected === 'fade') opacity = eased;
-    if (selected === 'slide') { const a = v.angle * Math.PI / 180, d = v.distance * el('guideStage').offsetHeight * (1 - eased); x = Math.sin(a) * d; y = -Math.cos(a) * d; }
-    if (selected === 'when') opacity = el('guideValue').value.split('|').includes(state) ? 1 : 0;
-    if (selected === 'ratio') { sample.style.width = width + 'px'; sample.style.height = width * snapshot.pixelHeight / snapshot.pixelWidth + 'px'; }
-    if (selected === 'group') opacity = fadeValue;
-    sample.style.transform = 'translate(' + x + 'px,' + y + 'px) rotate(' + angle + 'deg) scale(' + sx + ',' + sy + ')'; sample.style.opacity = opacity;
-    if (stateText) stateText.textContent = state;
-  }
-
-  function tick(now) { raf = 0; if (!visible || !playing || document.hidden || el('guideDetail').hidden) return; if (last) time += Math.min(.05, (now - last) / 1000); last = now; draw(); raf = requestAnimationFrame(tick); }
-  function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; last = 0; }
-  function needsClock() { return !previewNotes[selected] && (['Motion', 'Light', 'Entrance'].includes(catalogue.find(e => e.tag === selected).category) || ['sheen', 'splash'].includes(selected)); }
-  function start() { if (snapshot && visible && playing && needsClock() && !document.hidden && !el('guideDetail').hidden && !raf) raf = requestAnimationFrame(tick); }
   function pauseLabel() { el('guidePause').textContent = playing ? 'Pause' : 'Play'; el('guidePause').setAttribute('aria-pressed', String(!playing)); }
+  function maximize(value) {
+    if (value) savedScroll = scrollY;
+    expanded = value; document.body.classList.toggle('preview-expanded', expanded);
+    el('guideMaximize').textContent = expanded ? 'Back to guide' : 'Maximize';
+    el('guideMaximize').setAttribute('aria-expanded', String(expanded));
+    parent.postMessage({ pluginMessage: { type: 'guide-resize', expanded, width: Math.max(400, screen.availWidth - 160), height: Math.max(480, screen.availHeight - 160) } }, '*');
+    preview?.fit();
+    window.scrollTo(0, value ? 0 : savedScroll);
+  }
+
   function updateSelection() {
     const has = selection.tags[selected]?.count === selection.count && selection.count > 0;
     el('guideApply').disabled = !selection.count || !Object.keys(spec).length;
@@ -290,44 +186,55 @@
     el('guideSelection').textContent = !selection.count ? 'Select a layer to add this tag.' : selection.count === 1 ? selection.name : selection.count + ' layers selected';
   }
   el('guideSearch').oninput = list; el('guideCategory').onchange = list;
-  el('guideValue').oninput = () => { example(); draw(); };
-  el('guidePause').onclick = () => { playing = !playing; pauseLabel(); stop(); start(); };
-  el('guideReplay').onclick = () => { if (!snapshot || previewNotes[selected] || catalogue.find(e => e.tag === selected).category === 'Structure' && selected !== 'ignore') { refresh(); return; } time = 0; last = 0; enterTime = 0; clickTime = -100; imported = !imported; if (needsClock()) playing = true; scene(); tryControls(); draw(); start(); };
-  el('guideReset').onclick = () => { values = Object.fromEntries(Object.entries(spec[selected]?.params || {}).map(([k, p]) => [k, p.def])); time = 0; params(); draw(); };
+  el('guideValue').oninput = example;
+  el('guidePause').onclick = () => { playing = !playing; pauseLabel(); preview?.play(playing); };
+  el('guideReplay').onclick = () => { if (!preview) { refresh(); return; } preview.replay(); el('guideNote').textContent = 'Preview: ' + selection.name; };
+  el('guideRefresh').onclick = refresh;
+  el('guideMaximize').onclick = () => maximize(!expanded);
+  document.addEventListener('keydown', e => { if (expanded && e.key === 'Escape') { e.preventDefault(); maximize(false); el('guideMaximize').focus(); } });
+  el('guideReset').onclick = () => { values = Object.fromEntries(Object.entries(spec[selected]?.params || {}).map(([k, p]) => [k, p.def])); params(); preview?.updateTag(selected, values); };
   el('guideApply').onclick = () => parent.postMessage({ pluginMessage: { type: 'guide-apply', tag: selected, value: el('guideValue').value.trim(), params: { ...values } } }, '*');
   el('guideCopy').onclick = async () => {
     const value = el('guideExample').textContent;
     try { await navigator.clipboard.writeText(value); } catch { const t = make('textarea'); t.value = value; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
     el('guideCopy').textContent = 'Copied'; setTimeout(() => { el('guideCopy').textContent = 'Copy'; }, 1000);
   };
-  new ResizeObserver(() => { fitSnapshot(); draw(); }).observe(el('guideStage'));
-  window.addEventListener('unload', () => { clearTimeout(previewTimer); clearSnapshot(); stop(); });
-  document.addEventListener('visibilitychange', () => { stop(); start(); });
+  window.addEventListener('unload', () => { clearTimeout(previewTimer); clearScene(); });
+  document.addEventListener('visibilitychange', () => preview?.setVisible(visible && !document.hidden));
   window.FigloGuide = {
-    configure(definitions, tags) { spec = definitions; known = new Set(tags || Object.keys(spec)); choose(selected); list(); },
+    configure(definitions, tags) { spec = definitions; known = new Set(tags || Object.keys(spec)); choose(selected); list(); pauseLabel(); },
     selection(message) {
       const changed = message.id !== selection.id || message.count !== selection.count;
       selection = message; updateSelection(); example();
-      if (changed) { stop(); clearSnapshot(); previewError = ''; time = 0; hover = press = false; stateOverride = ''; point = { x: 0, y: 0 }; imported = false; clickTime = enterTime = -100; scene(); tryControls(); }
+      if (changed) { clearScene(); previewError = ''; placeholder(); choose(selected); }
       refresh();
     },
     refresh,
     async preview(message) {
-      if (!visible || message.requestId !== requestId || message.id !== selection.id || selection.count !== 1) return;
-      if (message.error) { stop(); clearSnapshot(); previewError = message.error; scene(); tryControls(); return; }
-      const url = URL.createObjectURL(new Blob([new Uint8Array(message.bytes)], { type: 'image/png' }));
-      const image = new Image(); image.src = url;
-      try { await image.decode(); } catch {
-        URL.revokeObjectURL(url);
-        if (!visible || message.requestId !== requestId || message.id !== selection.id) return;
-        stop(); clearSnapshot(); previewError = 'Could not display this layer. Use Refresh to try again.'; scene(); tryControls(); return;
+      const current = () => visible && message.requestId === requestId && message.id === selection.id && selection.count === 1;
+      if (!current()) return;
+      if (message.error) { clearScene(); previewError = message.error; placeholder(); choose(selected); return; }
+      const nextAssets = new Map();
+      try {
+        for (const item of message.images || []) {
+          const url = URL.createObjectURL(new Blob([new Uint8Array(item.bytes)], { type: 'image/png' }));
+          const img = new Image(); img.src = url; nextAssets.set(item.key, { url, w: 1, h: 1 });
+          await img.decode(); nextAssets.set(item.key, { url, w: img.naturalWidth, h: img.naturalHeight });
+          if (!current()) break;
+        }
+      } catch {
+        for (const a of nextAssets.values()) URL.revokeObjectURL(a.url);
+        if (!current()) return;
+        clearScene(); previewError = 'Could not load the preview images. Use Refresh to try again.'; placeholder(); return;
       }
-      if (!visible || message.requestId !== requestId || message.id !== selection.id) { URL.revokeObjectURL(url); return; }
-      clearSnapshot(); snapshotUrl = url; previewError = '';
-      snapshot = { name: message.name, pixelWidth: image.naturalWidth, pixelHeight: image.naturalHeight };
-      time = 0; scene(); width = snapshot.width; tryControls(); draw(); start();
+      if (!current()) { for (const a of nextAssets.values()) URL.revokeObjectURL(a.url); return; }
+      clearScene(); assets = nextAssets; sceneData = message; previewError = '';
+      preview = window.FigloPreview.mount(el('guideStage'), message.ir, assets, spec, text => { el('guideNote').textContent = text; });
+      preview.play(playing); el('guideStage').setAttribute('aria-busy', 'false');
+      el('guideNote').textContent = message.ir.warnings?.length ? message.ir.warnings.join(' · ') : 'Preview: ' + message.name;
+      choose(selected); el('guidePreviewTitle').textContent = message.name;
     },
     applied(message) { el('guideSelection').textContent = message.error || 'Applied to ' + message.count + (message.count === 1 ? ' layer.' : ' layers.'); el('guideSelection').className = message.error ? 'err' : ''; },
-    setVisible(value) { visible = value; stop(); if (visible) { scene(); tryControls(); draw(); start(); refresh(); } else { clearTimeout(previewTimer); ++requestId; } },
+    setVisible(value) { visible = value; preview?.setVisible(value); if (visible) { if (!preview) placeholder(); refresh(); } else { clearTimeout(previewTimer); ++requestId; parent.postMessage({ pluginMessage: { type: 'guide-preview-cancel' } }, '*'); if (expanded) maximize(false); } },
   };
 })();

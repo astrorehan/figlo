@@ -1,13 +1,31 @@
 # Tags
 
-Select one frame or layer and open **Tag Guide** to see your design in the preview.
-Browse tags, hover or press the selected artwork, replay entrances, and adjust
-settings before applying them. Selecting another layer updates the preview.
-Navigation, child layout, text fitting, gradients and tiled fills run in Roblox;
-their guide entries keep the selected artwork visible and explain the tag.
-The preview does not change your document. **Add to selected layer** applies
-the tag and its current settings. Applying an existing tag updates it.
-Sounds are saved as asset IDs and only play in Roblox.
+Select a parent frame and open **Tag Guide**. The preview builds its UI from the
+same layer tree used for import. Each child runs its own tags and saved settings;
+choosing a tag in the guide does not apply that effect to the parent.
+
+For example, select a shop panel containing `Buy_button_smooth` and
+`Highlight_when:hover`. Hovering Buy scales the button and shows its highlight.
+Pressing it uses the pressed state. An untagged parent stays still. Several tags
+on one layer run together. `_nodim` images keep their brightness.
+
+`_goto`, `_show`, `_hide` and `_switch` resolve names inside the selected frame.
+A target outside that frame is reported in the preview. Scrolling, gradients,
+tiled fills and entrance effects also run on their own layers. **Replay** restores
+visibility and restarts entrances; **Pause** stops the animation clock.
+
+**Maximize** expands the Figma plugin window and shows only the preview over a
+faint dotted background. **Back to guide** or **Esc** restores the normal window.
+It is the same preview, so its current state survives resizing.
+
+Guide settings adjust layers that already have the chosen tag, for this preview
+only. **Add to selected layer** saves a tag and its settings to the Figma selection.
+Source tags and plugin data are never changed by hovering, clicking or replaying.
+The exporter uses a temporary copy and removes it after rendering, including on
+failure. Baked `_image` layers have no live children, just as after import.
+This is a browser simulation of Figlo's UI tags. Purchase logic, custom Luau and
+Roblox sounds need Studio Play. Font rendering, easing and masking can differ from
+Roblox; check the imported UI in Play before shipping it.
 
 A layer gets a tag from a name suffix in Figma (`Play_smooth`, `Burst_rays`). The suffix is
 stripped from the Roblox name, so `Play_smooth` becomes `Play`. Several tags can be chained

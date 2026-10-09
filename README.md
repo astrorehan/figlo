@@ -40,9 +40,15 @@ The result appears under `StarterGui` as `Figlo_<frame name>`. Check it in Play
 and save your place. To try Figlo first, click **Create demo frame** in the Figma
 plugin. [Demo preview](docs/demo.svg).
 
-Select a frame or layer, then open **Tag Guide** to try tags on your own design.
-Hover or click the preview, change its settings, or replay an entrance. **Add to selected layer**
-applies the tag and settings; trying the preview doesn't change your design.
+Select a panel and open **Tag Guide** to interact with its UI. Each child uses its
+own tags: a `Buy_button_smooth` responds to hover and press, while an untagged shop
+frame stays still. Navigation tags can open, close or switch layers inside that
+frame. **Maximize** opens the preview across a larger plugin window; **Esc** returns
+to the guide. The preview has a faint dotted background.
+
+Browsing tags does not add them to the preview. Settings affect children that
+already have that tag. **Add to selected layer** saves the tag and settings to
+your Figma selection.
 
 Restarting the relay changes its pairing token unless you set `FIGLO_TOKEN`.
 Paste the new token into both panels. The token is private; the export code is

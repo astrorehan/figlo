@@ -52,7 +52,13 @@
     <div id="fxlist"></div>
   </div>
   <div id="pageGuide" class="page">
-    <p class="guide-intro">Try a tag, then add it to your layer.</p>
+    <section id="guidePreviewPanel" aria-label="UI preview">
+      <div class="guide-preview-heading"><strong id="guidePreviewTitle">UI preview</strong><button id="guideMaximize" class="guide-secondary" aria-expanded="false">Maximize</button></div>
+      <div id="guideStage" aria-label="Interactive UI preview"></div>
+      <div class="guide-toolbar"><span id="guideInstruction">Hover or click the UI</span><button id="guideRefresh" class="guide-secondary">Refresh</button><button id="guideReplay" class="guide-secondary">Replay</button><button id="guidePause" class="guide-secondary">Pause</button></div>
+      <p id="guideNote" class="guide-note">Select a panel to interact with its tagged children.</p>
+    </section>
+    <p class="guide-intro">Find a tag. Add it to a layer to use it in your UI.</p>
     <div class="guide-filters"><input id="guideSearch" type="search" placeholder="Search tags" aria-label="Search tags"><select id="guideCategory" aria-label="Tag category"><option value="">All tags</option></select></div>
     <div id="guideList" aria-label="Tags"></div>
     <div id="guideEmpty" hidden>No tags found. Try another search.</div>
@@ -60,12 +66,8 @@
       <div class="guide-heading"><h2 id="guideTitle"></h2><span id="guideGroup"></span></div>
       <p id="guideDescription"></p>
       <div class="guide-example"><code id="guideExample"></code><button id="guideCopy" class="guide-secondary">Copy</button></div>
-      <div id="guideStage" aria-label="Interactive tag preview"></div>
-      <div class="guide-toolbar"><span id="guideInstruction"></span><button id="guideReplay" class="guide-secondary">Replay</button><button id="guidePause" class="guide-secondary">Pause</button></div>
-      <p id="guideNote" class="guide-note">Select a frame to preview it.</p>
       <div id="guideValueRow" hidden><label id="guideValueLabel" for="guideValue"></label><input id="guideValue" type="text" maxlength="80"></div>
-      <div id="guideTryControls"></div>
-      <details id="guideSettings"><summary>Try settings</summary><div id="guideParams"></div><button id="guideReset" class="guide-secondary">Reset defaults</button></details>
+      <details id="guideSettings"><summary>Preview settings</summary><p id="guideSettingsNote" class="guide-note"></p><div id="guideParams"></div><button id="guideReset" class="guide-secondary">Reset defaults</button></details>
       <p id="guidePlacement"></p>
       <button id="guideApply" disabled>Add to selected layer</button>
       <div id="guideSelection" role="status" aria-live="polite">Select a layer to add this tag.</div>

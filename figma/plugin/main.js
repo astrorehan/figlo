@@ -73,34 +73,41 @@ function fxState() {
 
 function sendFxState() { figma.ui.postMessage(fxState()); }
 
-// Read-only snapshot for the guide. Never use the import export helpers here:
-// those can temporarily alter nodes to bake individual assets.
-let guidePreviewRequest = 0;
-async function sendGuidePreview(msg) {
+// Scene previews are serialized because asset export uses temporary nodes.
+let guidePreviewRequest = 0, guidePreviewQueue = Promise.resolve();
+let guideSourceIds = new Set();
+function sendGuidePreview(msg) {
   const request = ++guidePreviewRequest;
-  const reply = { type: 'guide-preview', requestId: msg.requestId, id: msg.id };
-  const nodes = figma.currentPage.selection;
-  if (nodes.length !== 1 || nodes[0].id !== msg.id) return;
-  const node = nodes[0];
-  try {
-    if (typeof node.exportAsync !== 'function') throw new Error('This layer cannot be previewed.');
-    const bounds = node.absoluteRenderBounds || node.absoluteBoundingBox;
-    const w = bounds ? bounds.width : node.width, h = bounds ? bounds.height : node.height;
-    if (!(w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h))) throw new Error('This layer has no visible artwork.');
-    const bytes = await node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: Math.min(1, 1024 / Math.max(w, h)) } });
-    if (!bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error('This preview is too large. Try a smaller frame.');
-    const current = figma.currentPage.selection;
-    if (request !== guidePreviewRequest || node.removed || current.length !== 1 || current[0].id !== msg.id) return;
-    figma.ui.postMessage({ ...reply, name: node.name, bytes });
-  } catch (e) {
-    if (request === guidePreviewRequest) figma.ui.postMessage({ ...reply, error: String(e && e.message || e) });
-  }
+  const run = async () => {
+    const isCurrent = () => request === guidePreviewRequest && figma.currentPage.selection.length === 1 && figma.currentPage.selection[0].id === msg.id;
+    if (!isCurrent()) return;
+    const node = figma.currentPage.selection[0];
+    guideSourceIds = new Set();
+    const pending = [node];
+    while (pending.length && guideSourceIds.size <= 600) { const n = pending.pop(); guideSourceIds.add(n.id); pending.push(...(n.children || [])); }
+    const reply = { type: 'guide-preview', requestId: msg.requestId, id: msg.id };
+    try {
+      const scene = await buildGuideScene(node, isCurrent);
+      if (isCurrent() && !node.removed) figma.ui.postMessage({ ...reply, name: node.name, ...scene });
+    } catch (e) {
+      if (isCurrent()) figma.ui.postMessage({ ...reply, error: String(e && e.message || e) });
+    }
+  };
+  guidePreviewQueue = guidePreviewQueue.then(run, run);
+  return guidePreviewQueue;
 }
 
 // Listen only to the active page; dynamic-page plugins need not load the file.
 let guidePage = null;
 let guidePageRequest = 0;
-const guideDirty = () => figma.ui.postMessage({ type: 'guide-preview-dirty' });
+const guideDirty = event => {
+  if ((event.nodeChanges || []).some(change => {
+    if (guideSourceIds.has(change.node.id)) return true;
+    if (change.node.removed) return false;
+    for (let n = change.node.parent; n; n = n.parent) if (guideSourceIds.has(n.id)) return true;
+    return false;
+  })) figma.ui.postMessage({ type: 'guide-preview-dirty' });
+};
 async function watchGuidePage() {
   const page = figma.currentPage;
   if (guidePage === page) return;
@@ -204,6 +211,13 @@ function applyGuideTag(msg) {
 }
 
 figma.ui.onmessage = async msg => {
+  if (msg.type === 'guide-preview-cancel') { guidePreviewRequest++; return; }
+  if (msg.type === 'guide-resize') {
+    const large = msg.expanded === true;
+    const w = large ? Math.max(400, Math.min(1120, Number(msg.width) || 1120)) : 400;
+    const h = large ? Math.max(480, Math.min(820, Number(msg.height) || 820)) : 680;
+    figma.ui.resize(w, h); return;
+  }
   if (msg.type === 'guide-preview') { await sendGuidePreview(msg); return; }
   if (msg.type === 'guide-apply') {
     try {

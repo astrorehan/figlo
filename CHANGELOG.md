@@ -4,8 +4,10 @@
 
 - Add a searchable Tag Guide to the Figma plugin, with interactive previews,
   adjustable settings and an action to apply tags to selected layers.
-- Use the selected frame or layer in guide previews, preserving its artwork and
-  aspect ratio. Refresh when the selection or page artwork changes.
+- Simulate the selected UI tree using each child's own tags and stored settings,
+  including button states, navigation, scrolling and combined effects.
+- Add a maximized preview with a faint dotted background and an Escape shortcut
+  to return to the guide. Preserve the scene while resizing.
 - Include structural tags and baking aliases in the guide and selection state.
 
 ## 0.1.0-alpha.1
