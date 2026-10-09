@@ -37,7 +37,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Install pinned tools
-        run: rokit install --no-trust-check
+        shell: bash
+        run: |
+          # Authenticated requests avoid GitHub's anonymous API rate limit (HTTP 403).
+          rokit authenticate github --token "$GH_TOKEN" --skip-verify
+          rokit install --no-trust-check
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Add pinned tool shims (Linux)
         if: runner.os == 'Linux'
         run: echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
