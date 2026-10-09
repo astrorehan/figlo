@@ -915,7 +915,7 @@ function extract(rootNode) {
 
 const MAX_IMAGE = 1024; // Roblox downsizes anything bigger
 
-figma.showUI(__html__, { width: 320, height: 480, themeColors: true });
+figma.showUI(__html__, { width: 400, height: 680, themeColors: true });
 
 function selectedRoot() {
   const sel = figma.currentPage.selection;
@@ -973,12 +973,13 @@ function fxState() {
   for (const n of sel) {
     const meta = parseName(n.name);
     const fx = effectParams(n, meta.tags) || {};
-    for (const tag of Object.keys(EFFECTS)) {
+    for (const tag of KNOWN_TAGS) {
       if (nameWithout(n.name, tag) === n.name) continue;
       if (!tags[tag]) tags[tag] = { count: 0, values: fx[tag] || (effectParams(n, { [tag]: true }) || {})[tag] || {} };
       tags[tag].count++;
       if (typeof meta.tags[tag] === 'string') tags[tag].value = meta.tags[tag];
     }
+    if (n.name.startsWith('#')) { tags['#'] ||= { count: 0, values: {} }; tags['#'].count++; }
   }
   return { type: 'fx-state', count: sel.length, name: sel.length === 1 ? sel[0].name : null, tags };
 }
@@ -1024,7 +1025,68 @@ function setParam(tag, key, value) {
   }
 }
 
+// Guide previews are local; only this explicit action writes to the document.
+function applyGuideTag(msg) {
+  const tag = msg.tag;
+  if (tag !== '#' && !KNOWN_TAGS.has(tag)) throw new Error('Unknown tag.');
+  const selection = figma.currentPage.selection;
+  if (!selection.length) throw new Error('Select a layer first.');
+  const spec = EFFECTS[tag];
+  const value = String(msg.value || '').trim();
+  if (value.length > 80 || value.includes('_')) throw new Error('Tag values must be at most 80 characters and cannot contain underscores.');
+  if (['goto', 'show', 'switch', 'when'].includes(tag) && !value) throw new Error('Enter a target or state first.');
+  if (tag === 'when' && value.split('|').some(v => !['hover', 'press', 'rest', 'locked', 'active'].includes(v))) throw new Error('Use hover, press, rest, locked or active, separated by |.');
+  const params = {};
+  for (const [key, input] of Object.entries(msg.params || {})) {
+    const p = spec && Object.prototype.hasOwnProperty.call(spec.params, key) && spec.params[key];
+    if (!p) throw new Error('Unknown parameter: ' + key);
+    if (p.type === 'text') {
+      if (typeof input !== 'string' || input.length > 128) throw new Error('Invalid ' + p.label);
+      if (key === 'color' && !/^#?[0-9a-f]{6}$/i.test(input)) throw new Error('Use a six-digit hex color.');
+      if (/Sound$/.test(key) && !/^(?:rbxassetid:\/\/)?\d+$/.test(input)) throw new Error('Use a numeric sound asset ID, or 0 for silence.');
+      params[key] = key === 'color' ? input.replace('#', '').toUpperCase() : input;
+    } else {
+      if (typeof input !== 'number' || !Number.isFinite(input) || input < p.min || input > p.max) throw new Error('Invalid ' + p.label);
+      params[key] = input;
+    }
+  }
+  // Validate the entire request before touching any selected layer.
+  for (const node of selection) {
+    if (tag === '#') {
+      if (!node.name.startsWith('#')) node.name = '#' + node.name;
+    } else {
+      if (nameWithout(node.name, tag) === node.name) node.name += '_' + tag;
+      if (spec && spec.value) {
+        const parts = node.name.split('_');
+        for (let i = parts.length - 1; i > 0; i--) {
+          const key = parts[i].split(':')[0].toLowerCase();
+          if (!KNOWN_TAGS.has(key)) break;
+          if (key === tag) { parts[i] = value ? tag + ':' + value : tag; break; }
+        }
+        node.name = parts.join('_');
+      }
+      if (Object.keys(params).length) {
+        const saved = readFx(node);
+        const fx = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+        const previous = fx[tag];
+        fx[tag] = Object.assign(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}, params);
+        node.setPluginData('fx', JSON.stringify(fx));
+      }
+    }
+  }
+}
+
 figma.ui.onmessage = async msg => {
+  if (msg.type === 'guide-apply') {
+    try {
+      applyGuideTag(msg);
+      sendFxState();
+      figma.ui.postMessage({ type: 'guide-applied', count: figma.currentPage.selection.length });
+    } catch (e) {
+      figma.ui.postMessage({ type: 'guide-applied', error: String(e && e.message || e) });
+    }
+    return;
+  }
   if (msg.type === 'create-demo') {
     try {
       await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
@@ -1053,7 +1115,7 @@ figma.ui.onmessage = async msg => {
   if (msg.type === 'selection?') {
     const r = selectedRoot();
     figma.ui.postMessage({ type: 'selection', name: r.node ? r.node.name : null, error: r.error || null });
-    figma.ui.postMessage({ type: 'effects', spec: EFFECTS });
+    figma.ui.postMessage({ type: 'effects', spec: EFFECTS, knownTags: [...KNOWN_TAGS] });
     sendFxState();
     return;
   }

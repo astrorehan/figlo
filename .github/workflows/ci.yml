@@ -54,7 +54,7 @@ jobs:
       - run: bun run check
       - run: bun run build
       - name: Require reproducible generated files
-        run: git diff --exit-code -- figma/plugin/code.js samples/demo.ir.json
+        run: git diff --exit-code -- figma/plugin/code.js figma/plugin/ui.html samples/demo.ir.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Figlo-${{ runner.os }}
@@ -62,3 +62,4 @@ jobs:
             build/Figlo.rbxm
             out/figlo-page.min.js
             figma/plugin/code.js
+            figma/plugin/ui.html

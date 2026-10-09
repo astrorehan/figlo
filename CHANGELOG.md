@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add a searchable Tag Guide to the Figma plugin, with interactive previews,
+  adjustable settings, navigation examples and an action to apply tags to selected layers.
+- Include structural tags and baking aliases in the guide and selection state.
+
 ## 0.1.0-alpha.1
 
 - Rename the plugins and new imports to Figlo; retain existing import identifiers

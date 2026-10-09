@@ -1,5 +1,13 @@
 # Tags
 
+The Figma plugin's **Tag Guide** lists every supported tag, with a searchable
+example and a preview. Hover or press the sample, try navigation, replay entrances,
+and adjust settings before applying them to your selected layers. Structural
+examples show the import behavior; they do not render an actual Roblox UI.
+The preview does not change your document. **Add to selected layer** applies
+the tag and its current settings. Applying an existing tag updates it.
+Sounds are saved as asset IDs and only play in Roblox.
+
 A layer gets a tag from a name suffix in Figma (`Play_smooth`, `Burst_rays`). The suffix is
 stripped from the Roblox name, so `Play_smooth` becomes `Play`. Several tags can be chained
 (`Badge_pulse_image`). A few tags take a value after a colon (`Tab_goto:Gems`); a value cannot

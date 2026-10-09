@@ -5,9 +5,16 @@ dependencies. Run `bun run check` before proposing a change and `bun run build`
 after changing plugin code.
 
 Edit `figma/extract.js` and `figma/plugin/main.js`; regenerate the checked-in
-`figma/plugin/code.js` using `bun tools/build_figma.ts`. Edit Studio scripts in
+`figma/plugin/code.js` using `bun tools/build_figma.ts`. For the plugin panel, edit
+`figma/plugin/ui.source.html`, `tag-guide.js` and `tag-guide.css`; the same build
+command regenerates `ui.html`. Do not edit the generated UI directly. Edit Studio scripts in
 `studio/src`, then sync or build through Rojo/Argon. Do not maintain a second
 source copy edited only in Studio.
+
+The optional panel browser test is `node tools/test_guide_browser.ts` (Node 24+
+and an externally installed Playwright). Set `FIGLO_PLAYWRIGHT_MODULE` to its
+module path and, if needed, `FIGLO_BROWSER_CHANNEL` to an installed browser such
+as `msedge`. It checks tag previews and interaction without connecting to Figma.
 
 Bug reports should include tool versions, a minimal original frame, expected
 behavior and import warnings. Remove private design content and tokens. Include
