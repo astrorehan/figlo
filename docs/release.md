@@ -1,7 +1,8 @@
 # Alpha release verification
 
-Version: `0.1.0-alpha.1`. The source tree and release artifacts are prepared
-locally; no remote repository or public marketplace listing is configured.
+Version: `0.1.0-alpha.1`. The public repository is
+[astrorehan/figlo](https://github.com/astrorehan/figlo). There is no public
+marketplace listing; this alpha uses local development plugins.
 
 ## Automated checks
 
@@ -29,8 +30,9 @@ SHA-256 checksums. Packaging only includes tracked sources and allowlisted build
 artifacts, excluding sessions, backups and personal working exports.
 
 CI is configured for Windows and Linux with pinned action revisions, Bun, Rokit,
-Rojo and Lune. Local checks do not constitute a GitHub Actions run. The maintainer
-must verify both CI jobs after pushing the repository to its chosen host.
+Rojo and Lune. Both jobs passed in
+[the first hosted run](https://github.com/astrorehan/figlo/actions/runs/37893738095).
+Verify both jobs again for the final release commit.
 
 ## Interactive release gate
 
@@ -73,7 +75,8 @@ initialize. `docs/demo.svg` is a design preview, not a screenshot or proof of
 Studio visual parity. This alpha is not described as visually verified or as
 approved for either platform's marketplace.
 
-Before publishing: complete the interactive gate, inspect the source archive,
-run hosted CI, enable private vulnerability reporting and choose the repository
-URL. Publish only the files in `build/release/0.1.0-alpha.1` after verifying the
-SHA-256 manifest. Retain a release tag pointing at the verified source commit.
+The public alpha explicitly retains the pending interactive checks above and
+the experimental Studio MCP status. Complete those checks before claiming
+visual verification or supported MCP imports. Private vulnerability reporting
+is enabled. Publish only the files in `build/release/0.1.0-alpha.1` after verifying
+the SHA-256 manifest. Retain a release tag pointing at the verified source commit.

@@ -40,7 +40,8 @@ compilation and compiled-plugin source inspection. The checks and builds also
 pass from a fresh local checkout.
 
 Interactive Figma/Studio rendering, real account/group uploads, moderation and
-Undo engine behavior remain pending. Hosted CI has not run before publication.
+Undo engine behavior and the experimental Studio MCP route remain pending.
+GitHub Actions checks and builds passed on both Windows and Linux.
 This release does not promise pixel-identical rendering or marketplace approval.
 Check font fallback, masks and desktop/mobile layouts in your own place. Audio
 is silent by default; supply assets your experience can use.
