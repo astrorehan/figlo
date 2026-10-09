@@ -22,15 +22,16 @@ if any(f not in files for f in required):
 if any(f.startswith(('.bak/', 'out/', 'build/', 'relay/.sessions/', 'node_modules/')) for f in files):
     raise SystemExit('Private/generated working data must not be tracked')
 
-def archive(path, entries):
+def archive(path, entries, committed=False):
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for source, target in sorted(entries, key=lambda entry: entry[1]):
             info = zipfile.ZipInfo(target, date_time=(2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            z.writestr(info, source.read_bytes())
+            data = subprocess.check_output(['git', 'show', f'HEAD:{source.relative_to(root).as_posix()}'], cwd=root) if committed else source.read_bytes()
+            z.writestr(info, data)
 
-archive(out / f'Figlo-{version}-source.zip', [(root / f, f'Figlo/{f}') for f in files])
+archive(out / f'Figlo-{version}-source.zip', [(root / f, f'Figlo/{f}') for f in files], committed=True)
 with zipfile.ZipFile(out / f'Figlo-{version}-source.zip', 'a', zipfile.ZIP_DEFLATED) as z:
     info = zipfile.ZipInfo('Figlo/REVISION.txt', date_time=(2026, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_DEFLATED
