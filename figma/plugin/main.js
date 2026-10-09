@@ -68,10 +68,50 @@ function fxState() {
     }
     if (n.name.startsWith('#')) { tags['#'] ||= { count: 0, values: {} }; tags['#'].count++; }
   }
-  return { type: 'fx-state', count: sel.length, name: sel.length === 1 ? sel[0].name : null, tags };
+  return { type: 'fx-state', count: sel.length, id: sel.length === 1 ? sel[0].id : null, name: sel.length === 1 ? sel[0].name : null, tags };
 }
 
 function sendFxState() { figma.ui.postMessage(fxState()); }
+
+// Read-only snapshot for the guide. Never use the import export helpers here:
+// those can temporarily alter nodes to bake individual assets.
+let guidePreviewRequest = 0;
+async function sendGuidePreview(msg) {
+  const request = ++guidePreviewRequest;
+  const reply = { type: 'guide-preview', requestId: msg.requestId, id: msg.id };
+  const nodes = figma.currentPage.selection;
+  if (nodes.length !== 1 || nodes[0].id !== msg.id) return;
+  const node = nodes[0];
+  try {
+    if (typeof node.exportAsync !== 'function') throw new Error('This layer cannot be previewed.');
+    const bounds = node.absoluteRenderBounds || node.absoluteBoundingBox;
+    const w = bounds ? bounds.width : node.width, h = bounds ? bounds.height : node.height;
+    if (!(w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h))) throw new Error('This layer has no visible artwork.');
+    const bytes = await node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: Math.min(1, 1024 / Math.max(w, h)) } });
+    if (!bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error('This preview is too large. Try a smaller frame.');
+    const current = figma.currentPage.selection;
+    if (request !== guidePreviewRequest || node.removed || current.length !== 1 || current[0].id !== msg.id) return;
+    figma.ui.postMessage({ ...reply, name: node.name, bytes });
+  } catch (e) {
+    if (request === guidePreviewRequest) figma.ui.postMessage({ ...reply, error: String(e && e.message || e) });
+  }
+}
+
+// Listen only to the active page; dynamic-page plugins need not load the file.
+let guidePage = null;
+let guidePageRequest = 0;
+const guideDirty = () => figma.ui.postMessage({ type: 'guide-preview-dirty' });
+async function watchGuidePage() {
+  const page = figma.currentPage;
+  if (guidePage === page) return;
+  const request = ++guidePageRequest;
+  if (guidePage) guidePage.off('nodechange', guideDirty);
+  guidePage = null;
+  await page.loadAsync();
+  if (request !== guidePageRequest || page !== figma.currentPage) return;
+  page.on('nodechange', guideDirty);
+  guidePage = page;
+}
 
 function toggleTag(tag) {
   const sel = figma.currentPage.selection;
@@ -164,6 +204,7 @@ function applyGuideTag(msg) {
 }
 
 figma.ui.onmessage = async msg => {
+  if (msg.type === 'guide-preview') { await sendGuidePreview(msg); return; }
   if (msg.type === 'guide-apply') {
     try {
       applyGuideTag(msg);
@@ -242,7 +283,10 @@ figma.ui.onmessage = async msg => {
 };
 
 figma.on('selectionchange', () => {
+  guidePreviewRequest++;
   const r = selectedRoot();
   figma.ui.postMessage({ type: 'selection', name: r.node ? r.node.name : null, error: r.error || null });
   sendFxState();
 });
+figma.on('currentpagechange', () => { watchGuidePage().catch(() => {}); });
+watchGuidePage().catch(() => {});

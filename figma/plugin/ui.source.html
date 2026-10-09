@@ -62,7 +62,7 @@
       <div class="guide-example"><code id="guideExample"></code><button id="guideCopy" class="guide-secondary">Copy</button></div>
       <div id="guideStage" aria-label="Interactive tag preview"></div>
       <div class="guide-toolbar"><span id="guideInstruction"></span><button id="guideReplay" class="guide-secondary">Replay</button><button id="guidePause" class="guide-secondary">Pause</button></div>
-      <p class="guide-note">Example preview. Check the imported UI in Studio.</p>
+      <p id="guideNote" class="guide-note">Select a frame to preview it.</p>
       <div id="guideValueRow" hidden><label id="guideValueLabel" for="guideValue"></label><input id="guideValue" type="text" maxlength="80"></div>
       <div id="guideTryControls"></div>
       <details id="guideSettings"><summary>Try settings</summary><div id="guideParams"></div><button id="guideReset" class="guide-secondary">Reset defaults</button></details>
@@ -273,6 +273,10 @@ onmessage = async e => {
     window.FigloGuide?.selection(m);
   } else if (m.type === 'guide-applied') {
     window.FigloGuide?.applied(m);
+  } else if (m.type === 'guide-preview') {
+    window.FigloGuide?.preview(m);
+  } else if (m.type === 'guide-preview-dirty') {
+    window.FigloGuide?.refresh();
   } else if (m.type === 'selection') {
     selectionOk = !m.error;
     $('sel').textContent = m.error || ('Selected: ' + m.name);

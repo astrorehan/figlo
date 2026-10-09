@@ -3,7 +3,9 @@
 ## Unreleased
 
 - Add a searchable Tag Guide to the Figma plugin, with interactive previews,
-  adjustable settings, navigation examples and an action to apply tags to selected layers.
+  adjustable settings and an action to apply tags to selected layers.
+- Use the selected frame or layer in guide previews, preserving its artwork and
+  aspect ratio. Refresh when the selection or page artwork changes.
 - Include structural tags and baking aliases in the guide and selection state.
 
 ## 0.1.0-alpha.1

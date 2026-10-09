@@ -1,9 +1,10 @@
 # Tags
 
-The Figma plugin's **Tag Guide** lists every supported tag, with a searchable
-example and a preview. Hover or press the sample, try navigation, replay entrances,
-and adjust settings before applying them to your selected layers. Structural
-examples show the import behavior; they do not render an actual Roblox UI.
+Select one frame or layer and open **Tag Guide** to see your design in the preview.
+Browse tags, hover or press the selected artwork, replay entrances, and adjust
+settings before applying them. Selecting another layer updates the preview.
+Navigation, child layout, text fitting, gradients and tiled fills run in Roblox;
+their guide entries keep the selected artwork visible and explain the tag.
 The preview does not change your document. **Add to selected layer** applies
 the tag and its current settings. Applying an existing tag updates it.
 Sounds are saved as asset IDs and only play in Roblox.

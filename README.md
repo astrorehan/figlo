@@ -40,8 +40,8 @@ The result appears under `StarterGui` as `Figlo_<frame name>`. Check it in Play
 and save your place. To try Figlo first, click **Create demo frame** in the Figma
 plugin. [Demo preview](docs/demo.svg).
 
-Open **Tag Guide** in the Figma plugin to browse tags and try them. Hover or click
-the preview, change its settings, or replay an entrance. **Add to selected layer**
+Select a frame or layer, then open **Tag Guide** to try tags on your own design.
+Hover or click the preview, change its settings, or replay an entrance. **Add to selected layer**
 applies the tag and settings; trying the preview doesn't change your design.
 
 Restarting the relay changes its pairing token unless you set `FIGLO_TOKEN`.
