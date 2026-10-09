@@ -16,7 +16,8 @@ an independent project, not affiliated with or endorsed by Figma or Roblox.
 
 **Just installing?** Follow the [download and installation guide](docs/install.md).
 Prebuilt plugins are on [GitHub Releases](https://github.com/astrorehan/figlo/releases).
-For model-driven workflows, see [Studio MCP integration (experimental)](docs/studio-mcp.md).
+For model-driven workflows, see [automated imports](#automated-imports-with-a-model)
+and [Studio MCP integration (experimental)](docs/studio-mcp.md).
 
 Requirements: Figma desktop, Roblox Studio, [Bun 1.3.10](https://bun.sh), and
 [Rokit 1.2.0](https://github.com/rojo-rbx/rokit). Rojo and Lune are pinned in `rokit.toml`.
@@ -48,6 +49,61 @@ For an original example with no external artwork, press **Create demo frame** in
 Figma plugin, then export it. `samples/demo.ir.json` is the corresponding headless test
 fixture. The Figma-created version uses actual font measurements, so text bounds may
 vary from the fixture. [Preview](docs/demo.svg).
+
+## Automated imports with a model
+
+**Fully unattended import is not available in this alpha.** A model can use a
+local CLI, shell tools and Studio MCP; it does not need to run inside a browser.
+However, Studio MCP alone does not supply access to the Figma document or the
+plugin execution permissions needed to finish an import.
+
+The intended unattended workflow is:
+
+1. Read the supplied Figma file and frame/node ID through an authorized document
+   connection, export the frame and its raster artwork, and pack the Figlo payload.
+2. Send that payload to the authenticated local relay and obtain its export code.
+3. Request an import in the intended Studio place through a Figlo plugin execution
+   bridge. The plugin performs the import, asset uploads and Undo recording.
+4. Read the result and warnings, inspect the generated UI through Studio MCP,
+   verify the result in Play, and report success or a specific failure.
+
+Steps 1 and 3 are integration work still needed for a supported unattended route.
+There is currently no Figlo MCP import tool, plugin request queue or automated
+Figma export endpoint. The alpha plugin panels require selection/export, pairing
+and an import action. The tested Studio MCP context could execute Luau and create
+an EditableImage, but could not begin an Undo recording; the guarded API recipe
+therefore stopped before importing. See [test details](docs/studio-mcp.md).
+
+### Existing automation building blocks
+
+- `bun run relay` starts the local relay. Supply a private `FIGLO_TOKEN` to the
+  relay and callers for the same session; never commit it.
+- An authenticated FFP1 payload can be posted to `/push`; the response supplies
+  the export code. `tools/push_clipboard.ts` also accepts a file containing an
+  `FFGZ:` export, so sending an existing export can run without manual copying:
+  `bun tools/push_clipboard.ts /path/to/export.txt`.
+- The optional browser driver exposes `window.__ffrun(nodeId)` and its export
+  result in `window.__ffb64`. It requires an editor session exposing the `figma`
+  global. Headless Chrome is unverified and does not create that API by itself.
+- Workspace modules can be synced through Rojo/Argon. Studio MCP can inspect the
+  resulting instances; direct importer execution also requires a context with
+  the necessary upload and Undo permissions.
+
+### Request template for a model
+
+Once the missing integrations exist and the environment is provisioned, a single
+request should identify the design, destination and asset owner. For example:
+
+> Import Figma file <file>, frame <node ID>, into Studio place <place ID> using
+> Figlo. Use the configured local relay and asset owner. Export, import and inspect
+> the result automatically, without asking me to click Export or Import. Keep
+> script changes in workspace files and sync them. Report the resulting instance
+> path and warnings. If a required connection, permission or import bridge is
+> unavailable, stop and report the blocker; do not claim success.
+
+This is a target workflow, not a working unattended command for the current alpha.
+Initial installation, account sign-in and permission grants remain provisioning
+steps even when individual imports are eventually automated.
 
 ## Re-import and pages
 
