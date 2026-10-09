@@ -9,6 +9,17 @@ Studio MCP execution contexts vary: HTTP access, Studio user identity, asset upl
 permissions and ChangeHistoryService recording must be tested in the chosen client.
 The local plugin remains the supported alpha import interface.
 
+### Observed bundled Studio MCP limitation
+
+On 9 October 2026, a connected Studio in edit mode successfully executed Luau,
+queried Studio user identity and created/destroyed a temporary EditableImage.
+However, `ChangeHistoryService:TryBeginRecording` returned no recording, and
+`InsertService:LoadLocalAsset` was rejected for missing RobloxScript capability.
+The guarded import recipe below therefore cannot proceed in that tested context.
+Use the local plugin panel for imports until a plugin-side execution bridge is
+implemented and verified. MCP can still inspect the imported instance tree.
+This check did not upload images or modify game objects.
+
 ## Local CLI clients on Windows
 
 Both Codex CLI and Claude Code can connect to a local stdio MCP server. Studio
