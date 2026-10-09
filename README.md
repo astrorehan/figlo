@@ -1,3 +1,5 @@
+<img src="docs/brand/icon.svg" width="80" height="80" alt="Figlo icon" />
+
 # Figlo
 
 Bring a Figma frame into Roblox Studio as editable UI, with optional animation tags.
@@ -11,6 +13,10 @@ proportions. Fonts, masks, clipping and rasterization have limits; see
 an independent project, not affiliated with or endorsed by Figma or Roblox.
 
 ## Quickstart
+
+**Just installing?** Follow the [download and installation guide](docs/install.md).
+Prebuilt plugins are on [GitHub Releases](https://github.com/astrorehan/figlo/releases).
+For model-driven workflows, see [Studio MCP integration (experimental)](docs/studio-mcp.md).
 
 Requirements: Figma desktop, Roblox Studio, [Bun 1.3.10](https://bun.sh), and
 [Rokit 1.2.0](https://github.com/rojo-rbx/rokit). Rojo and Lune are pinned in `rokit.toml`.

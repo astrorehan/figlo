@@ -18,6 +18,8 @@ independent project, not affiliated with or endorsed by either platform.
   retry cleanup, and Undo cancellation for failed plugin imports.
 - Reproducible plugin/source packaging, SHA-256 checksums, pinned tools and CI
   configuration for Windows and Linux.
+- An original five-color Figlo icon, a download/install guide and an experimental
+  Studio MCP integration recipe using the shipping Luau API.
 
 ## Install
 
@@ -43,7 +45,7 @@ This release does not promise pixel-identical rendering or marketplace approval.
 Check font fallback, masks and desktop/mobile layouts in your own place. Audio
 is silent by default; supply assets your experience can use.
 
-See `README.md`, `docs/compatibility.md`, `docs/troubleshooting.md` and
+See `docs/install.md`, `docs/studio-mcp.md`, `README.md`, `docs/compatibility.md`, `docs/troubleshooting.md` and
 `docs/release.md` in the source archive for setup, limitations and the remaining
 interactive verification steps. Keep pairing tokens and private designs out of
 public issue reports.

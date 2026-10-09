@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Figlo icon</title>
+  <desc id="desc">A five-color geometric f with a tilted square opening.</desc>
+  <rect width="256" height="256" rx="56" fill="#141820"/>
+  <path d="M64 48h64v64H64z" fill="#F24E1E"/>
+  <path d="M128 48h36c24 0 44 20 44 44v20h-80z" fill="#FF7262"/>
+  <path d="M64 112h64v64H64z" fill="#A259FF"/>
+  <path d="M128 112h64v64h-64z" fill="#1ABCFE"/>
+  <path d="M64 176h64v16a32 32 0 0 1-64 0z" fill="#0ACF83"/>
+  <path d="m157 123 28 9-9 28-28-9z" fill="#141820"/>
+</svg>
