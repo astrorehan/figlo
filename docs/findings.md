@@ -1,6 +1,9 @@
 # Findings
 
-## Flash panel test (samples/flash.ir.json)
+## Historical private panel measurement
+
+These measurements came from a development panel, not the public demo. The original
+design is not distributed. `samples/demo.ir.json` is a separate, original fixture.
 
 - 45 nodes checked by id against a hand-measured reference build. Every frame, image, button
   and mask lands at 0.0 px (position and size, in Figma px).
@@ -28,6 +31,22 @@
 - gradientTransform row 0 `(a, b, c)`: `t = a*px + b*py + c`; angle = `atan2(b, a)`.
 - Rotation sign is opposite to Roblox; mirrored transforms (det < 0) must be baked to an image.
 - `exportAsync` output = absoluteRenderBounds, clipped by masks.
+
+## Sharp images
+
+- Roblox mipmaps every uploaded image. Drawn smaller than its pixels it blends in the half-size
+  level and looks soft; Figma draws vectors at screen resolution, so 1x exports looked blurrier
+  in game than in Figma (a panel fitted to a 1080p screen is ~0.83x its design, a side rail
+  ~0.58x; a small design is enlarged instead, 2.7x for a close button).
+- So images are sized for a 1920 x 1080 screen (`FF_SCREEN` in extract.js, the IR's `screen`):
+  Figma exports at the root's fit scale (at most 2x, at most 1024 px a side), and
+  `studio/src/Crisp.luau` shrinks each image to the pixels it covers there (the root's current
+  Size counts, so re-importing a resized root re-sizes its images) with a Catmull-Rom filter on
+  premultiplied colour before upload. Images are never enlarged in Studio.
+- `_native` on a frame keeps design pixels for the images inside it: icon sheets whose asset ids
+  code reuses at other sizes. Tiled fills keep theirs too.
+- Each upload is cached by pixels and target size (`sha@WxH`), so a re-import at the same size
+  reuses its uploads.
 
 ## Figma images
 

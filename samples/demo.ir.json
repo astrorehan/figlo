@@ -1,0 +1,220 @@
+{
+  "v": 1,
+  "source": {
+    "file": "figlo-demo",
+    "node": "demo:root",
+    "name": "Figlo Demo"
+  },
+  "design": {
+    "w": 640,
+    "h": 400
+  },
+  "screen": {
+    "w": 1920,
+    "h": 1080
+  },
+  "root": {
+    "id": "demo:root",
+    "name": "Figlo Demo",
+    "kind": "frame",
+    "x": 0.5,
+    "y": 0.5,
+    "w": 1,
+    "h": 1,
+    "rot": 0,
+    "pw": 640,
+    "ph": 400,
+    "fill": {
+      "c": [
+        0.055,
+        0.075,
+        0.13
+      ],
+      "a": 1
+    },
+    "radius": 24,
+    "children": [
+      {
+        "id": "demo:title",
+        "name": "Title",
+        "x": 0.5,
+        "y": 0.165,
+        "w": 0.875,
+        "h": 0.13,
+        "rot": 0,
+        "pw": 560,
+        "ph": 52,
+        "tags": {
+          "txt": true
+        },
+        "kind": "text",
+        "text": {
+          "value": "Design. Import. Play.",
+          "family": "Roboto",
+          "style": "Bold",
+          "size": 36,
+          "lineHeight": {
+            "px": 44
+          },
+          "alignX": "LEFT",
+          "alignY": "TOP",
+          "autoResize": "NONE",
+          "hardLines": 1,
+          "inkW": 560,
+          "inkH": 52,
+          "noDescenders": false,
+          "fill": {
+            "c": [
+              0.95,
+              0.97,
+              1
+            ],
+            "a": 1
+          },
+          "stroke": null
+        }
+      },
+      {
+        "id": "demo:card",
+        "name": "Card",
+        "x": 0.5,
+        "y": 0.5,
+        "w": 0.875,
+        "h": 0.39,
+        "rot": 0,
+        "pw": 560,
+        "ph": 156,
+        "tags": {
+          "frame": true
+        },
+        "kind": "frame",
+        "fill": {
+          "c": [
+            0.1,
+            0.14,
+            0.23
+          ],
+          "a": 1
+        },
+        "radius": 16,
+        "children": [
+          {
+            "id": "demo:dot",
+            "name": "Dot",
+            "x": 0.11429,
+            "y": 0.4359,
+            "w": 0.11429,
+            "h": 0.41026,
+            "rot": 0,
+            "pw": 64,
+            "ph": 64,
+            "tags": {
+              "pulse": true
+            },
+            "fx": {
+              "pulse": {
+                "amp": 0.05,
+                "rate": 1
+              }
+            },
+            "kind": "frame",
+            "fill": {
+              "c": [
+                0.35,
+                0.87,
+                0.76
+              ],
+              "a": 1
+            },
+            "radius": 32
+          },
+          {
+            "id": "demo:label",
+            "name": "Caption",
+            "x": 0.575,
+            "y": 0.40385,
+            "w": 0.70714,
+            "h": 0.37179,
+            "rot": 0,
+            "pw": 396,
+            "ph": 58,
+            "tags": {
+              "txt": true
+            },
+            "kind": "text",
+            "text": {
+              "value": "Figma to Roblox",
+              "family": "Roboto",
+              "style": "Regular",
+              "size": 26,
+              "lineHeight": {
+                "px": 34
+              },
+              "alignX": "LEFT",
+              "alignY": "TOP",
+              "autoResize": "NONE",
+              "hardLines": 1,
+              "inkW": 396,
+              "inkH": 58,
+              "noDescenders": false,
+              "fill": {
+                "c": [
+                  0.82,
+                  0.87,
+                  0.96
+                ],
+                "a": 1
+              },
+              "stroke": null
+            }
+          }
+        ]
+      },
+      {
+        "id": "demo:button",
+        "name": "Continue",
+        "x": 0.5,
+        "y": 0.84,
+        "w": 0.875,
+        "h": 0.13,
+        "rot": 0,
+        "pw": 560,
+        "ph": 52,
+        "tags": {
+          "smooth": true,
+          "button": true
+        },
+        "fx": {
+          "smooth": {
+            "hover": 1.08,
+            "press": 0.9,
+            "time": 0.15,
+            "hoverSound": "0",
+            "clickSound": "0"
+          },
+          "button": {
+            "hoverDim": 0.8,
+            "pressDim": 0.62
+          }
+        },
+        "kind": "frame",
+        "button": true,
+        "fill": {
+          "c": [
+            0.35,
+            0.87,
+            0.76
+          ],
+          "a": 1
+        },
+        "radius": 12,
+        "children": []
+      }
+    ]
+  },
+  "images": {},
+  "fonts": [
+    "Roboto"
+  ],
+  "warnings": []
+}

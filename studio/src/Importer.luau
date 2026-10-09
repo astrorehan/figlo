@@ -12,21 +12,29 @@ local AssetService = game:GetService("AssetService")
 local ContentProvider = game:GetService("ContentProvider")
 local HttpService = game:GetService("HttpService")
 local ServerStorage = game:GetService("ServerStorage")
+local StudioService = game:GetService("StudioService")
 
 local Builder = require(script.Parent.Builder)
+local Crisp = require(script.Parent.Crisp)
+local ImageKey = require(script.Parent.ImageKey)
+local Protocol = require(script.Parent.Protocol)
 
 local Importer = {}
 
 export type Options = {
 	relay: string?, -- default http://127.0.0.1:34880
+	token: string, -- pairing token printed by the relay
+	creatorId: number?, -- optional asset owner; defaults to the Studio user
+	creatorType: Enum.AssetCreatorType?, -- User or Group when creatorId is supplied
 	parent: Instance, -- where a new ScreenGui goes (StarterGui); also searched for an earlier import
-	into: Instance?, -- a FrameFig ScreenGui: add (or update) the frame as a page Folder inside it
+	into: Instance?, -- a Figlo ScreenGui: add (or update) the frame as a page Folder inside it
 	runtime: Instance?,
 	client: Instance?,
-	cache: { [string]: string }?, -- pixel sha1 -> rbxassetid, reused across imports
+	cache: { [string]: string }?, -- ImageKey -> rbxassetid, reused across imports
 	log: ((string) -> ())?,
-	backup: Instance | false | nil, -- where replaced roots go (default ServerStorage.FrameFigBackups)
+	backup: Instance | false | nil, -- where replaced roots go (default ServerStorage.FigloBackups)
 	checkImages: boolean?, -- ask Roblox whether every image loads (default true)
+	crisp: boolean?, -- shrink images to their size on the reference screen (default true; Crisp.luau)
 }
 
 local DEFAULT_RELAY = "http://127.0.0.1:34880"
@@ -52,27 +60,27 @@ local STRUCTURAL = {
 
 local ROOT_PROPS = { "AnchorPoint", "Position", "Size", "Visible" }
 
-local function upload(name: string, w: number, h: number, pixels: string): string
+local function upload(name: string, w: number, h: number, pixels: string, creatorId: number?, creatorType: Enum.AssetCreatorType?): string
 	local img = AssetService:CreateEditableImage({ Size = Vector2.new(w, h) })
-	img:WritePixelsBuffer(Vector2.zero, img.Size, buffer.fromstring(pixels))
-	local lastErr = "unknown"
-	for attempt = 1, UPLOAD_RETRIES do
-		local ok, result, id = pcall(function()
-			return AssetService:CreateAssetAsync(img, Enum.AssetType.Image, {
-				Name = name:sub(1, 50),
-				Description = "FrameFig export",
-			})
-		end)
-		if ok and result == Enum.CreateAssetResult.Success then
-			img:Destroy()
-			return "rbxassetid://" .. tostring(id)
+	assert(img, "EditableImage allocation failed; check Studio permissions and memory")
+	local ok, result = pcall(function()
+		img:WritePixelsBuffer(Vector2.zero, img.Size, buffer.fromstring(pixels))
+		local params: any = { Name = name:sub(1, 50), Description = "Figlo export" }
+		if creatorId then params.CreatorId, params.CreatorType = creatorId, creatorType end
+		local lastErr = "unknown"
+		for attempt = 1, UPLOAD_RETRIES do
+			local uploaded, status, id = pcall(function()
+				return AssetService:CreateAssetAsync(img, Enum.AssetType.Image, params)
+			end)
+			if uploaded and status == Enum.CreateAssetResult.Success then return "rbxassetid://" .. tostring(id) end
+			lastErr = tostring(status)
+			if attempt < UPLOAD_RETRIES then task.wait(2 * attempt) end
 		end
-		lastErr = tostring(result)
-		-- 30 uploads/minute: back off and retry.
-		task.wait(2 * attempt)
-	end
+		error(("upload of %s failed: %s"):format(name, lastErr))
+	end)
 	img:Destroy()
-	error(("upload of %s failed: %s"):format(name, lastErr))
+	if not ok then error(result) end
+	return result
 end
 
 -- --- overrides ------------------------------------------------------------------
@@ -256,9 +264,9 @@ local function stamp(container: Instance, ir: any)
 	container:SetAttribute("FF_Source", sourceOf(ir))
 end
 
-local function saveSnapshot(container: Instance, root: GuiObject, log: (string) -> ())
+local function saveSnapshot(container: Instance, imported: { [string]: any }, log: (string) -> ())
 	local ok, err = pcall(function()
-		container:SetAttribute("FF_Imported", HttpService:JSONEncode(snapshot(root)))
+		container:SetAttribute("FF_Imported", HttpService:JSONEncode(imported))
 	end)
 	if not ok then
 		log("Could not store the import snapshot: " .. tostring(err))
@@ -272,10 +280,10 @@ local function backupFolder(opts: Options): Instance?
 	if opts.backup then
 		return opts.backup :: any
 	end
-	local folder = ServerStorage:FindFirstChild("FrameFigBackups")
+	local folder = ServerStorage:FindFirstChild("FigloBackups")
 	if not folder then
 		folder = Instance.new("Folder")
-		folder.Name = "FrameFigBackups"
+		folder.Name = "FigloBackups"
 		folder.Parent = ServerStorage
 	end
 	return folder
@@ -308,19 +316,21 @@ local function installRuntime(gui: Instance, opts: Options)
 		return
 	end
 	if opts.runtime then
-		local old = gui:FindFirstChild("FrameFigRuntime")
+		local old = gui:FindFirstChild("FigloRuntime") or gui:FindFirstChild("FrameFigRuntime")
+		local runtimeName = if old then old.Name else "FigloRuntime"
 		if old then
 			old:Destroy()
 		end
 		local rt = opts.runtime:Clone()
-		rt.Name = "FrameFigRuntime"
+		rt.Name = runtimeName
 		rt.Parent = gui
 	end
 	if opts.client then
-		local old = gui:FindFirstChild("FrameFigClient")
+		local old = gui:FindFirstChild("FigloClient") or gui:FindFirstChild("FrameFigClient")
+		local clientName = if old then old.Name else "FigloClient"
 		local stock = old
 			and old:IsA("LocalScript")
-			and (old :: any).Source:find("FrameFig", 1, true) ~= nil
+			and ((old :: any).Source:find("Figlo", 1, true) ~= nil or (old :: any).Source:find("FrameFig", 1, true) ~= nil)
 			and (old :: any).Source:find("Runtime\")).watch(script.Parent)", 1, true) ~= nil
 		if old and not stock and old:GetAttribute("FF_Stock") ~= true then
 			return -- a hand-written client; leave it
@@ -329,7 +339,7 @@ local function installRuntime(gui: Instance, opts: Options)
 			old:Destroy()
 		end
 		local cl = opts.client:Clone()
-		cl.Name = "FrameFigClient"
+		cl.Name = clientName
 		cl:SetAttribute("FF_Stock", true)
 		cl.Parent = gui
 	end
@@ -364,20 +374,55 @@ end
 
 function Importer.run(code: string, opts: Options): (Instance, { string })
 	local relay = opts.relay or DEFAULT_RELAY
+	Protocol.validateRelay(relay)
 	local log = opts.log or function(_: string) end
 	local cache = opts.cache or {}
 	code = code:upper():gsub("%s", "")
+	assert(code:match("^[A-HJ-NP-Z2-9]+$") and #code == 6, "Export code must contain six letters/digits")
+	assert(typeof(opts.token) == "string" and #opts.token >= 32 and #opts.token <= 128 and not opts.token:find("[^%w_-]"), "Paste the relay pairing token")
+	local headers = { Authorization = "Bearer " .. opts.token }
+	if opts.creatorId then
+		assert(opts.creatorId > 0 and opts.creatorId % 1 == 0, "Invalid creatorId")
+		assert(opts.creatorType == Enum.AssetCreatorType.User or opts.creatorType == Enum.AssetCreatorType.Group, "Set creatorType to User or Group")
+	end
+	local owner = if opts.creatorId then tostring(opts.creatorType) .. ":" .. tostring(opts.creatorId) else "user:" .. tostring(StudioService:GetUserId())
 	if opts.into and not (opts.into:IsA("ScreenGui") or isContainer(opts.into)) then
-		error("`into` must be a ScreenGui built by FrameFig")
+		error("`into` must be a ScreenGui built by Figlo")
 	end
 
 	log("Fetching " .. code .. "…")
-	local ok, body = pcall(HttpService.GetAsync, HttpService, ("%s/pull/%s"):format(relay, code))
+	local ok, body = pcall(HttpService.GetAsync, HttpService, ("%s/pull/%s"):format(relay, code), true, headers)
 	if not ok then
-		error("Cannot reach the FrameFig relay (is it running?) or the code is wrong: " .. tostring(body))
+		error("Cannot fetch export: check relay, pairing token and code. " .. tostring(body))
 	end
 	local payload = HttpService:JSONDecode(body)
+	Protocol.validate(payload)
 	local ir = payload.ir
+
+	local name = "Figlo_" .. ir.root.name
+	local shrink: { [string]: number } = {}
+	if opts.crisp ~= false then
+		local screen = ir.screen or Crisp.DEFAULT_SCREEN
+		local size, gui = UDim2.fromScale(1, 1), opts.into
+		local existing = findContainer(ir, opts, name)
+		if existing then
+			local oldRoot = existing:FindFirstChild(tostring(existing:GetAttribute("FF_Root")))
+			if oldRoot and oldRoot:IsA("GuiObject") then
+				size = oldRoot.Size -- a root resized in Studio keeps that size
+			end
+			gui = if existing:IsA("ScreenGui") then existing else existing:FindFirstAncestorWhichIsA("ScreenGui")
+		end
+		if gui and gui:IsA("ScreenGui") and not gui.IgnoreGuiInset then
+			screen = { w = screen.w, h = screen.h - Crisp.GUI_INSET }
+		end
+		local sizes = {}
+		for _, im in payload.images do
+			sizes[im.key] = { w = im.w, h = im.h }
+		end
+		local k = Crisp.rootScale(size, ir.design.w, ir.design.h, screen)
+		shrink = Crisp.scales(ir, k, sizes)
+		log(("Sizing images for a %dx%d screen (%.2f px per design px)"):format(screen.w, screen.h, k))
+	end
 
 	local images: { [string]: string } = {}
 	local imageSizes: { [string]: Vector2 } = {}
@@ -387,22 +432,30 @@ function Importer.run(code: string, opts: Options): (Instance, { string })
 		else
 			imageSizes[im.key] = Vector2.new(im.w, im.h)
 		end
-		local cached = cache[im.sha]
+		local w, h = im.w, im.h
+		if shrink[im.key] then
+			w, h = Crisp.shrunk(im.w, im.h, shrink[im.key])
+		end
+		local cacheKey = ImageKey.make(im.sha, im.w, im.h, w, h, owner)
+		local cached = cache[cacheKey]
 		if cached then
 			images[im.key] = cached
 			log(("Image %d/%d cached"):format(n, #payload.images))
 		else
-			log(("Uploading image %d/%d (%dx%d)…"):format(n, #payload.images, im.w, im.h))
-			local pixels = HttpService:GetAsync(("%s/img/%s/%d"):format(relay, code, im.i))
+			local pixels = HttpService:GetAsync(("%s/img/%s/%d"):format(relay, code, im.i), true, headers)
 			assert(#pixels == im.w * im.h * 4, "image data truncated for " .. im.key)
-			local id = upload(ir.source.name .. " " .. im.key, im.w, im.h, pixels)
-			cache[im.sha] = id
+			if w ~= im.w or h ~= im.h then
+				log(("Image %d/%d: %dx%d -> %dx%d, its size on screen"):format(n, #payload.images, im.w, im.h, w, h))
+				pixels = Crisp.resample(pixels, im.w, im.h, w, h)
+			end
+			log(("Uploading image %d/%d (%dx%d)…"):format(n, #payload.images, w, h))
+			local id = upload(ir.source.name .. " " .. im.key, w, h, pixels, opts.creatorId, opts.creatorType)
+			cache[cacheKey] = id
 			images[im.key] = id
 		end
 	end
 
 	log("Building…")
-	local name = "FrameFig_" .. ir.root.name
 	local temp, warnings = Builder.build(ir, {
 		images = images,
 		imageSizes = imageSizes,
@@ -410,6 +463,8 @@ function Importer.run(code: string, opts: Options): (Instance, { string })
 		name = name,
 	})
 	local newRoot = temp:FindFirstChild(ir.root.name) :: GuiObject
+	-- Save Figma's values before carrying Studio overrides; otherwise a second re-import loses them.
+	local imported = snapshot(newRoot)
 
 	local container = findContainer(ir, opts, name)
 	if container then
@@ -456,7 +511,7 @@ function Importer.run(code: string, opts: Options): (Instance, { string })
 	end
 	temp:Destroy()
 	local target = container :: Instance
-	saveSnapshot(target, newRoot, log)
+	saveSnapshot(target, imported, log)
 
 	local gui = if target:IsA("ScreenGui") then target else target:FindFirstAncestorWhichIsA("ScreenGui")
 	if gui then
@@ -488,7 +543,7 @@ function Importer.run(code: string, opts: Options): (Instance, { string })
 	end
 
 	-- Size text for the current viewport once layout has run (no scripts run in Edit).
-	local runtime = gui and gui:FindFirstChild("FrameFigRuntime")
+	local runtime = gui and (gui:FindFirstChild("FigloRuntime") or gui:FindFirstChild("FrameFigRuntime"))
 	if runtime and runtime:IsA("ModuleScript") then
 		task.wait()
 		pcall(function()
@@ -501,8 +556,8 @@ end
 
 -- Runs an import in its own thread (for callers with a time limit) and reports on
 -- `status` (default: the folder holding this module) through attributes:
--- FrameFigStatus = "running" | "done" | "failed: …", FrameFigLog (recent lines),
--- FrameFigResult (full name of the container), FrameFigWarnings (one per line).
+-- FigloStatus = "running" | "done" | "failed: …", FigloLog (recent lines),
+-- FigloResult (full name of the container), FigloWarnings (one per line).
 function Importer.start(code: string, opts: Options & { status: Instance? })
 	local status = opts.status or script.Parent
 	local lines: { string } = {}
@@ -512,25 +567,25 @@ function Importer.start(code: string, opts: Options & { status: Instance? })
 		if #lines > 40 then
 			table.remove(lines, 1)
 		end
-		status:SetAttribute("FrameFigLog", table.concat(lines, "\n"))
+		status:SetAttribute("FigloLog", table.concat(lines, "\n"))
 		if userLog then
 			userLog(line)
 		end
 	end
-	status:SetAttribute("FrameFigStatus", "running")
-	status:SetAttribute("FrameFigResult", nil)
-	status:SetAttribute("FrameFigWarnings", nil)
-	status:SetAttribute("FrameFigLog", "")
+	status:SetAttribute("FigloStatus", "running")
+	status:SetAttribute("FigloResult", nil)
+	status:SetAttribute("FigloWarnings", nil)
+	status:SetAttribute("FigloLog", "")
 	local runOpts = table.clone(opts) :: any
 	runOpts.log = log
 	task.spawn(function()
 		local ok, result, warnings = pcall(Importer.run, code, runOpts)
 		if ok then
-			status:SetAttribute("FrameFigResult", result:GetFullName())
-			status:SetAttribute("FrameFigWarnings", table.concat(warnings, "\n"))
-			status:SetAttribute("FrameFigStatus", "done")
+			status:SetAttribute("FigloResult", result:GetFullName())
+			status:SetAttribute("FigloWarnings", table.concat(warnings, "\n"))
+			status:SetAttribute("FigloStatus", "done")
 		else
-			status:SetAttribute("FrameFigStatus", "failed: " .. tostring(result))
+			status:SetAttribute("FigloStatus", "failed: " .. tostring(result))
 		end
 	end)
 end

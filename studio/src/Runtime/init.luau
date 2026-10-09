@@ -1,5 +1,5 @@
 --!strict
--- FrameFig runtime: keeps text and text strokes proportional to the design,
+-- Figlo runtime: keeps text and text strokes proportional to the design,
 -- and starts the tag effects (Effects module) when the GUI runs in game.
 --
 -- Roblox TextSize is an integer number of pixels (max 100), so each label stores
@@ -236,7 +236,7 @@ function Runtime.watch(gui: Instance)
 	Effects.start(gui, Runtime)
 end
 
--- Starts the effects of an object that lives outside its FrameFig ScreenGui (a
+-- Starts the effects of an object that lives outside its Figlo ScreenGui (a
 -- template your code cloned), the object itself included. Text keeps the size it
 -- had when cloned; call Runtime.apply on a container for proportional text.
 function Runtime.attach(obj: Instance)

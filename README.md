@@ -1,105 +1,151 @@
-# FrameFig
+# Figlo
 
-Figma → Roblox Studio UI importer. Select a frame in Figma, export it, paste a six-letter code in
-Studio, and get a ScreenGui that matches the design 1:1: Scale-based layout, real TextLabels on
-the same baselines as Figma, native gradients/strokes/corners where Roblox can draw them, and
-baked images where it cannot. Layer-name tags (`_smooth`, `_pulse`, `_drift`...) add button
-feedback and idle animation in game.
+Bring a Figma frame into Roblox Studio as editable UI, with optional animation tags.
 
-## How it works
+Figlo keeps text as TextLabels, uses native Roblox shapes where possible, and uploads
+raster images for artwork Roblox cannot reproduce natively. Layout follows the design's
+proportions. Fonts, masks, clipping and rasterization have limits; see
+[compatibility](docs/compatibility.md) before expecting pixel-identical output.
 
+**Status: alpha.** Local development plugins, a local relay, and a source build. Figlo is
+an independent project, not affiliated with or endorsed by Figma or Roblox.
+
+## Quickstart
+
+Requirements: Figma desktop, Roblox Studio, [Bun 1.3.10](https://bun.sh), and
+[Rokit 1.2.0](https://github.com/rojo-rbx/rokit). Rojo and Lune are pinned in `rokit.toml`.
+No npm packages, accounts for hosted services, or API keys are required.
+
+```sh
+rokit install
+bun run build
+bun run relay
 ```
-Figma plugin (figma/)          local relay (relay/)           Studio plugin (studio/src/)
-extract IR + export PNGs  -->  holds the export under  -->   pulls by code, uploads images,
-                               a short code                   builds the ScreenGui
+
+1. In Figma desktop, use **Plugins > Development > Import plugin from manifest** and
+   choose `figma/plugin/manifest.json` from this checkout. Run **Figlo**.
+2. In Studio, install `build/Figlo.rbxm` as a local plugin. Copy it into your local
+   Plugins folder, then restart Studio. On Windows this is normally
+   `%LOCALAPPDATA%/Roblox/Plugins`; on macOS, `~/Documents/Roblox/Plugins`.
+3. Enable **Allow HTTP Requests** in the place. Allow the Figlo plugin's requested
+   HTTP and script permissions. Image uploading also needs the relevant asset API
+   permissions in your Studio account; diagnose these using [troubleshooting](docs/troubleshooting.md).
+4. The relay terminal prints a **pairing token**. Paste that same token into the Figlo
+   panels in Figma and Studio. Keep it private. It changes each time the relay starts,
+   unless you supply `FIGLO_TOKEN` yourself. Tokens are not stored by either plugin.
+5. Select one frame in Figma, press **Export to Roblox**, then paste its six-character
+   export code into Figlo in Studio and press **Import**.
+6. Find `StarterGui.Figlo_<frame name>`. Use Play to check text, buttons and animation.
+   Save the place to keep the imported objects. Uploaded images are Roblox assets.
+
+For an original example with no external artwork, press **Create demo frame** in the
+Figma plugin, then export it. `samples/demo.ir.json` is the corresponding headless test
+fixture. The Figma-created version uses actual font measurements, so text bounds may
+vary from the fixture. [Preview](docs/demo.svg).
+
+## Re-import and pages
+
+Re-import matches the Figma source (`FF_Source`), including a renamed ScreenGui. It
+replaces the imported root and keeps the ScreenGui settings, root placement/visibility,
+and `FF_*` effect values changed in Studio. Children added by hand *inside* that root
+are replaced; keep custom objects outside it. The last replaced root per source is
+stored in `ServerStorage.FigloBackups`. Undo works in the Studio plugin, including
+cancellation of failed imports. Asset uploads are not reversed by Undo.
+
+To add another frame as a page, select a Figlo ScreenGui and use **Import as page**.
+Pages share a runtime; later pages start hidden. Tags such as `_goto:Details`, `_hide`
+and `_smooth` supply navigation and button feedback. See [effects](docs/effects.md).
+
+Existing imports made before the rename can still be located by `FF_Source`. Existing
+`FrameFigRuntime`/`FrameFigClient` object names are preserved during re-import so game
+scripts referencing them continue to work. New imports use `FigloRuntime`/`FigloClient`.
+`FF_*` attributes, IR version 1 and browser driver globals remain stable. The secured
+relay requires a pairing token for all clients; update older automation before using it.
+
+## Privacy and local relay
+
+Exports travel from Figma to the relay on **this computer**, then to Studio. There is no
+hosted relay or telemetry. Images selected for import are uploaded to Roblox, which
+applies its own ownership, moderation and availability rules. Figlo does not grant
+permission to use someone else's designs, fonts, images or audio.
+
+The relay binds only to IPv4/IPv6 loopback. Every export, image, source and deletion
+request needs the pairing token. Browser origins are limited to Figma and opaque plugin
+iframes; the token remains mandatory for those iframes. Host validation rejects other
+hostnames. Never expose this relay through a tunnel or bind it to a public interface.
+
+Exports are raw design JSON and pixels in `relay/.sessions/`. They expire **7 days after
+creation**, checked on every access and every minute while the relay runs. Shutdown
+pauses cleanup; the next startup removes expired files. Limits: 64 MiB per request,
+4 MiB JSON header, 256 images, 1024 pixels per image side, 64 saved exports, 512 MiB
+saved data and 64 MiB parsed-session cache. Invalid input is rejected before persistence.
+
+Optional environment variables: `FIGLO_TOKEN` (32-128 letters/digits/underscores/hyphens),
+`FIGLO_PORT` (default 34880), `FIGLO_SESSIONS` (storage directory). The desktop plugin
+panels use port 34880; CLI callers may set `FIGLO_RELAY`. To delete one export early:
+
+```sh
+# Set FIGLO_TOKEN privately in your shell first; do not commit it.
+curl -X DELETE -H "Authorization: Bearer $FIGLO_TOKEN" http://127.0.0.1:34880/exports/ABCDEF
 ```
 
-1. `figma/extract.js` walks the selected node and writes an IR JSON document (layout, text,
-   paints, image keys, tags). `figma/plugin/` wraps it in a Figma plugin with an Export tab and
-   an Effects tab for tag parameters.
-2. `relay/relay.ts` (Bun, loopback only) receives the export and hands out a code. Exports are
-   also written to `relay/.sessions/`, so a relay restart does not lose them.
-3. `studio/src/Importer.luau` pulls the export, uploads each image with
-   `AssetService:CreateAssetAsync` (with a sha1 cache so identical pixels are uploaded once),
-   and `Builder.luau` builds the UI.
-4. `Runtime/` and `Client.client.luau` ship inside the built ScreenGui: they keep text sizes
-   proportional (TextSize is an integer ≤ 100; a UIScale supplies the fraction) and run the
-   tag effects (`docs/effects.md`).
+In Windows PowerShell use `Invoke-RestMethod -Method Delete` with the same Authorization
+header. The six-character export code selects data; it is not an authentication token.
 
-## Setup
+## Script and runtime APIs
 
-- [Bun](https://bun.sh) for the relay and build scripts; [Rokit](https://github.com/rojo-rbx/rokit)
-  installs Rojo and Lune from `rokit.toml`.
-- Figma: `bun tools/build_figma.ts`, then *Plugins → Development → Import plugin from manifest*
-  and pick `figma/plugin/manifest.json`.
-- Studio: `rojo build plugin.project.json -o FrameFig.rbxm` and put the file in your Plugins
-  folder. Enable *Allow HTTP Requests* in the place (the importer talks to the relay on
-  `127.0.0.1:34880`).
-- Relay: `bun relay/relay.ts` (or `relay/start.cmd` on Windows).
-
-Without the Figma desktop plugin (e.g. figma.com in a browser you drive with a script),
-`bun tools/build_page.ts` writes `out/ffpage.min.js`, a paste-in driver exposing
-`window.__ffrun(nodeId)` and `window.__ffcopy()`; `bun tools/push_clipboard.ts` then pushes the
-copied export to the relay (it reads the clipboard itself when no file is given).
-
-## Importing
-
-Paste the code in the FrameFig widget and press **Import**. The result is
-`StarterGui.FrameFig_<frame name>`.
-
-- **Re-import updates in place.** The importer finds the earlier import of the same Figma node
-  (by its `FF_Source` attribute, so a renamed ScreenGui is still found) and replaces it. Kept from
-  the old copy: the ScreenGui's `Enabled`, `DisplayOrder`, `ResetOnSpawn` and `IgnoreGuiInset`;
-  the root's `AnchorPoint`, `Position`, `Size` and `Visible` if you changed them in Studio; and
-  every `FF_*` effect attribute you changed in Studio (for example `FF_drift_angle` or
-  `FF_rays = false`). Values changed in Figma still come through when Studio left them alone.
-- **Pages.** Select a ScreenGui built by FrameFig and press **Import as page**: the frame is added
-  to that ScreenGui inside a Folder named after it (hidden unless it is the first page), sharing
-  one runtime. That is how a tabbed panel is made from one Figma frame per tab. Re-importing a
-  page replaces it inside its Folder.
-- **Warnings** go to Output: fonts Roblox does not have, masks approximated by a box, tags that
-  look like typos, and images still waiting for Roblox moderation (they appear on their own once
-  approved; do not re-upload).
-
-Tags are listed in `docs/effects.md`.
-
-### From a script
+Place the modules from `studio/src` into a Folder through Rojo/Argon, retaining the
+`Runtime/Effects` child and `Client` LocalScript. Required importer siblings are
+`Builder`, `Crisp`, `FontMetrics`, `ImageKey` and `Protocol`.
 
 ```lua
-local ff = game.ServerStorage.FrameFig -- a folder holding Importer, Builder, FontMetrics, Runtime, Client
+local ff = game.ServerStorage.Figlo
 local Importer = require(ff.Importer)
-local gui, warnings = Importer.run("K7P2QX", {
-	parent = game.StarterGui,
-	runtime = ff.Runtime,
-	client = ff.Client,
-	-- into = game.StarterGui.Shop,    -- import as a page of an existing FrameFig ScreenGui
+local gui, warnings = Importer.run("ABCDEF", {
+    parent = game.StarterGui,
+    token = "<pairing token from relay terminal>",
+    runtime = ff.Runtime,
+    client = ff.Client,
+    -- into = game.StarterGui.MyPanel,
+    -- crisp = false, -- retain exported pixels
+    -- creatorId = 12345, creatorType = Enum.AssetCreatorType.Group,
 })
 ```
 
-`Importer.start(code, opts)` does the same in a background thread and reports progress in the
-attributes `FrameFigStatus` / `FrameFigLog` of `opts.status` (default: the folder holding the
-Importer), for callers with a time limit.
+Images default to the logged-in Studio user's ownership. For a group, supply both
+`creatorId` and `creatorType`, and use an account allowed to create that group's assets.
+Persist an `opts.cache` table to reuse uploads; its keys include pixel hash, source/target
+dimensions and owner. Old hash-only cache keys are not reused.
 
-Studio caches `require` results. After replacing the modules' `Source`, require a fresh
-`:Clone()` of the whole folder, or the old code keeps running without an error.
+`Importer.start(code, opts)` runs in a background thread and writes `FigloStatus`,
+`FigloLog`, `FigloResult` and `FigloWarnings` to `opts.status` or the importer folder.
+Direct callers must provide their own Undo recording; the plugin uses `ImportAction`.
+Studio caches `require`, so after syncing modules require a fresh clone of their entire
+Folder to use the new source.
 
-### Runtime API
+The embedded Runtime provides `watch(container)`, `attach(object)`, `apply(container)`,
+`setFxScale(object, value, channel)`, `setFxOffset(object, x, y, channel)` and
+`setFxRotation(object, degrees, channel)`. Use `FF_Locked` and `FF_Active` for button states.
 
-- `Runtime.watch(container)`: fit text and start effects for a ScreenGui or a page Folder. The
-  shipped client calls it for the ScreenGui and for every page Folder in it.
-- `Runtime.attach(object)`: start the effects of a cloned subtree that lives outside its
-  ScreenGui (a button template cloned by your code), including the object itself.
-- `Runtime.apply(container)`: fit text once (useful in Edit mode, where no scripts run).
-- `Runtime.setFxScale(object, k, channel)`: contribute to an object's single `UIScale`.
-- `Runtime.setFxOffset(object, x, y, channel)` / `Runtime.setFxRotation(object, degrees, channel)`:
-  the same for position (parent Scale units) and rotation.
-- Attributes your code can set: `FF_Locked` on a button (locks it), `FF_Active` (marks it
-  active for `_when:active`). `_goto` sets `FF_Page` on the ScreenGui.
+## Development and releases
 
-## Development
+```sh
+bun run check          # tests, Luau compilation, generated-file and release checks
+bun run build          # Figma plugin, optional web driver, Studio plugin
+bun run package        # requires Python 3.10+ and clean Git; plugins, source and checksums
+```
 
-- `lune run tools/check_luau` compiles every Luau file.
-- `bun test` runs the extractor tests (`figma/extract.test.ts`).
-- `bun relay/test_push_noimg.ts` pushes `samples/flash.ir.json` for a dry-run import.
-- `python tools/gen_fonts.py` regenerates `FontMetrics.luau` from the fonts bundled with Studio.
-- `docs/findings.md` records the measured Figma/Roblox behaviour the layout math relies on.
+CI runs the same checks and builds on Windows and Linux. Tests execute the shipping
+extractor, relay, builder and importer. Lune uses real serializable Roblox instances
+with fake HTTP, upload and font-measurement services: it cannot prove Studio rendering,
+account permissions or asset moderation. [Release verification](docs/release.md)
+separates automated evidence from interactive checks.
+
+The optional browser-console driver is for local development only. `bun tools/build_page.ts`
+writes `out/figlo-page.min.js`, exposing `window.__ffrun(id)` and `window.__ffcopy()`.
+`tools/push_clipboard.ts` sends its copied export using `FIGLO_TOKEN`. This depends on a
+Figma web `figma` global and is not the supported Community installation path.
+
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+
+MIT licensed. See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).

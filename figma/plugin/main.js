@@ -1,4 +1,4 @@
-// FrameFig Figma plugin entry. Appended after extract.js by tools/build_figma.ts.
+// Figlo Figma plugin entry. Appended after extract.js by tools/build_figma.ts.
 
 const MAX_IMAGE = 1024; // Roblox downsizes anything bigger
 
@@ -12,18 +12,19 @@ function selectedRoot() {
   return { node: n };
 }
 
-// PNG bytes of a node's render, scaled so the long side fits MAX_IMAGE.
-async function exportNode(node, w, h) {
-  const scale = Math.min(1, MAX_IMAGE / Math.max(w, h, 1));
+// PNG bytes of a node's render at the image's export scale (extract.js, FF_SCREEN),
+// shrunk further if the long side would pass MAX_IMAGE.
+async function exportNode(node, w, h, want) {
+  const scale = Math.min(want || 1, MAX_IMAGE / Math.max(w, h, 1));
   return withoutFoldAsync(node, () => node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: scale } }));
 }
 
 // Drop shadow alone: export a childless temporary clone (the body is drawn natively on top).
-async function exportShadow(node, w, h) {
-  if (!('children' in node) || node.children.length === 0) return exportNode(node, w, h);
+async function exportShadow(node, w, h, want) {
+  if (!('children' in node) || node.children.length === 0) return exportNode(node, w, h, want);
   const clone = childlessClone(node);
   try {
-    return await exportNode(clone, w, h);
+    return await exportNode(clone, w, h, want);
   } finally {
     clone.remove();
   }
@@ -33,7 +34,7 @@ async function imageBytes(key, info) {
   if (info.kind === 'hash') return imageFillBytes(info.hash);
   const node = await figma.getNodeByIdAsync(info.node);
   if (!node) throw new Error('node ' + info.node + ' not found');
-  const bytes = info.kind === 'shadow' ? await exportShadow(node, info.w, info.h) : await exportNode(node, info.w, info.h);
+  const bytes = info.kind === 'shadow' ? await exportShadow(node, info.w, info.h, info.scale) : await exportNode(node, info.w, info.h, info.scale);
   return { bytes };
 }
 
@@ -111,6 +112,31 @@ function setParam(tag, key, value) {
 }
 
 figma.ui.onmessage = async msg => {
+  if (msg.type === 'create-demo') {
+    try {
+      await figma.loadFontAsync({ family: 'Roboto', style: 'Regular' });
+      await figma.loadFontAsync({ family: 'Roboto', style: 'Bold' });
+      const paint = (r, g, b) => [{ type: 'SOLID', color: { r, g, b } }];
+      const root = figma.createFrame(); root.name = 'Figlo Demo'; root.resize(640, 400);
+      root.fills = paint(0.055, 0.075, 0.13); root.cornerRadius = 24;
+      const box = (parent, name, x, y, w, h, fill, radius) => {
+        const f = figma.createFrame(); parent.appendChild(f); f.name = name; f.resize(w, h); f.x = x; f.y = y; f.fills = fill; f.cornerRadius = radius; return f;
+      };
+      const text = (parent, name, value, x, y, w, size, style, fill) => {
+        const t = figma.createText(); parent.appendChild(t); t.name = name; t.fontName = { family: 'Roboto', style }; t.fontSize = size;
+        t.characters = value; t.resize(w, size * 1.5); t.x = x; t.y = y; t.fills = fill; return t;
+      };
+      text(root, 'Title_txt', 'Design. Import. Play.', 40, 40, 560, 36, 'Bold', paint(0.95, 0.97, 1));
+      const card = box(root, 'Card_frame', 40, 122, 560, 156, paint(0.10, 0.14, 0.23), 16);
+      const dot = figma.createEllipse(); card.appendChild(dot); dot.name = 'Dot_pulse'; dot.resize(64, 64); dot.x = 32; dot.y = 36; dot.fills = paint(0.35, 0.87, 0.76);
+      text(card, 'Caption_txt', 'Figma to Roblox', 124, 34, 396, 26, 'Regular', paint(0.82, 0.87, 0.96));
+      box(root, 'Continue_smooth', 40, 310, 560, 52, paint(0.35, 0.87, 0.76), 12);
+      root.x = figma.viewport.center.x - 320; root.y = figma.viewport.center.y - 200;
+      figma.currentPage.selection = [root]; figma.viewport.scrollAndZoomIntoView([root]);
+      figma.ui.postMessage({ type: 'selection', name: root.name, error: null });
+    } catch (e) { figma.ui.postMessage({ type: 'error', message: String(e && e.message || e) }); }
+    return;
+  }
   if (msg.type === 'selection?') {
     const r = selectedRoot();
     figma.ui.postMessage({ type: 'selection', name: r.node ? r.node.name : null, error: r.error || null });

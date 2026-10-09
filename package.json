@@ -1,0 +1,14 @@
+{
+  "name": "figlo",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "bun@1.3.10",
+  "scripts": {
+    "relay": "bun relay/relay.ts",
+    "test": "bun test && lune run tools/test_crisp && lune run tools/test_import",
+    "check": "bun run test && bun tools/test_relay_process.ts && lune run tools/check_luau && bun tools/check_release.ts",
+    "build": "bun tools/build.ts",
+    "package": "bun tools/package_release.ts"
+  }
+}

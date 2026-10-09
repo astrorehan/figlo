@@ -1,6 +1,6 @@
 {
-  "name": "FrameFig",
-  "id": "framefig-local-dev",
+  "name": "Figlo",
+  "id": "figlo-local-dev",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
@@ -9,6 +9,6 @@
   "networkAccess": {
     "allowedDomains": ["none"],
     "devAllowedDomains": ["http://localhost:34880"],
-    "reasoning": "Sends the export to the FrameFig relay running on this computer."
+    "reasoning": "Sends the export to the Figlo relay running on this computer."
   }
 }

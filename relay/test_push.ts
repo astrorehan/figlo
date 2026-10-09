@@ -1,5 +1,5 @@
-// Pushes samples/flash.ir.json plus synthetic images, prints the code. Dev only.
-const ir = await Bun.file(new URL("../samples/flash.ir.json", import.meta.url)).text();
+// Pushes samples/demo.ir.json plus synthetic images, prints the code. Dev only.
+const ir = await Bun.file(new URL("../samples/demo.ir.json", import.meta.url)).text();
 const w = Number(process.argv[2] ?? 256), h = Number(process.argv[3] ?? 128);
 const px = new Uint8Array(w * h * 4);
 for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -12,5 +12,7 @@ buf.set(new TextEncoder().encode("FFP1"));
 new DataView(buf.buffer).setUint32(4, head.length, true);
 buf.set(head, 8);
 buf.set(px, 8 + head.length);
-const r = await fetch("http://127.0.0.1:34880/push", { method: "POST", body: buf });
+const token = process.env.FIGLO_TOKEN;
+if (!token) throw new Error("Set FIGLO_TOKEN to the relay pairing token");
+const r = await fetch("http://127.0.0.1:34880/push", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: buf });
 console.log(await r.text());

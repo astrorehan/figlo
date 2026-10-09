@@ -38,7 +38,10 @@
   <div class="tabs"><button id="tabExport" class="on">Export</button><button id="tabFx">Effects</button></div>
   <div id="pageExport" class="page on">
     <div id="sel">…</div>
+    <label for="token">Relay pairing token</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token from relay terminal" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:8px">
     <button id="go">Export to Roblox</button>
+    <button id="demo" style="margin-top:8px;background:var(--figma-color-bg-secondary,#eee);color:inherit">Create demo frame</button>
     <div id="code"></div>
     <button id="copy">Copy code</button>
     <div id="status"></div>
@@ -51,6 +54,7 @@
 const RELAY = 'http://localhost:34880';
 const MAX_IMAGE = 1024;
 const $ = id => document.getElementById(id);
+$('demo').onclick = () => parent.postMessage({ pluginMessage: { type: 'create-demo' } }, '*');
 let selectionOk = false;
 
 function status(text, isError) {
@@ -92,13 +96,16 @@ async function push(ir, images) {
   let off = 8 + head.length;
   for (const d of decoded) { buf.set(d.data, off); off += d.data.length; }
   status('Sending to relay…');
-  const res = await fetch(RELAY + '/push', { method: 'POST', body: buf });
+  const token = $('token').value.trim();
+  if (!token) throw new Error('Paste the relay pairing token first.');
+  const res = await fetch(RELAY + '/push', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: buf });
   const out = await res.json();
   if (!res.ok) throw new Error(out.error || res.statusText);
   return out.code;
 }
 
 $('go').onclick = async () => {
+  if (!$('token').value.trim()) { status('Paste the relay pairing token first.', true); return; }
   $('go').disabled = true;
   $('code').textContent = '';
   $('copy').style.display = 'none';
@@ -243,7 +250,7 @@ onmessage = async e => {
       $('code').textContent = code;
       $('copy').style.display = 'block';
       const warn = m.ir.warnings.length ? `\n${m.ir.warnings.length} warning(s): ${m.ir.warnings.join('; ')}` : '';
-      status(`${m.images.length} images. Paste the code in the FrameFig Studio plugin.${warn}`);
+      status(`${m.images.length} images. Paste the code in the Figlo Studio plugin.${warn}`);
     } catch (err) {
       status('Push failed: ' + err.message, true);
     }

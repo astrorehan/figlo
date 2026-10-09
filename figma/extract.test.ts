@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { demoFrame, node } from "./fixtures";
 
-const { parseName, imageSizeFromBytes, KNOWN_TAGS, EFFECTS } = require("./extract.js");
+const { extract, parseName, imageSizeFromBytes, linearGradient, KNOWN_TAGS, EFFECTS } = require("./extract.js");
 
 describe("parseName", () => {
   test("strips known tags and keeps the base name", () => {
@@ -39,6 +40,14 @@ describe("parseName", () => {
     expect(m.tags.nodim).toBe(true);
   });
 
+  test("_native is a tag and does not bake", () => {
+    const m = parseName("Index Icons_native");
+    expect(m.name).toBe("Index Icons");
+    expect(m.tags.native).toBe(true);
+    expect(m.bake).toBeFalsy();
+    expect(m.unknown).toBeNull();
+  });
+
   test("navigation tags make a button", () => {
     for (const tag of ["goto:Cash", "show:Shop", "hide", "switch:Menu"]) {
       expect(parseName("Tab_" + tag).tags.button).toBe(true);
@@ -55,6 +64,48 @@ describe("parseName", () => {
 
   test("every tunable effect is a known tag", () => {
     for (const tag of Object.keys(EFFECTS)) expect(KNOWN_TAGS.has(tag)).toBe(true);
+  });
+});
+
+describe("extractor layout contract", () => {
+  (globalThis as any).figma = { fileKey: "figlo-demo" };
+  test("keeps nested relative geometry, text, buttons and effect parameters", () => {
+    const ir = extract(demoFrame());
+    expect(ir.design).toEqual({ w: 640, h: 400 });
+    const [title, card, button] = ir.root.children;
+    expect(title.kind).toBe("text"); expect(title.text.value).toBe("Design. Import. Play.");
+    expect(card.x).toBe(0.5); expect(card.y).toBe(0.5);
+    expect(card.children[0].x).toBeCloseTo(64 / 560, 4);
+    expect(button.button).toBe(true); expect(button.fx.smooth.hover).toBe(1.08);
+    expect(ir.images).toEqual({}); expect(ir.warnings).toEqual([]);
+  });
+  test("ignores hidden and tagged layers; bakes vector shapes", () => {
+    const root = demoFrame();
+    root.children.push(node("RECTANGLE", "ignored", "Hidden", 0, 0, 10, 10, { visible: false }), node("RECTANGLE", "ignore", "Ignore_ignore", 0, 0, 10, 10));
+    const vector = node("VECTOR", "vector", "Vector_pulse", 0, 0, 10, 10); vector.parent = root; root.children.push(vector);
+    const ir = extract(root);
+    expect(ir.root.children).toHaveLength(4); expect(ir.root.children[3].kind).toBe("image"); expect(ir.images.vector.node).toBe("vector");
+  });
+  test("propagates native export size and captures auto layout", () => {
+    const root = demoFrame(); root.name += "_native";
+    const card = root.children[1]; card.name = "Card_stack"; card.layoutMode = "VERTICAL"; card.itemSpacing = 12; card.paddingLeft = 20;
+    const vector = node("VECTOR", "vector", "Vector_image", 0, 0, 10, 10); vector.parent = card; card.children.push(vector);
+    const ir = extract(root), layout = ir.root.children[1];
+    expect(layout.layout.dir).toBe("VERTICAL"); expect(layout.layout.gap).toBe(12); expect(layout.layout.pad[0]).toBe(20);
+    expect(layout.children[2].native).toBe(true); expect(ir.images.vector.scale).toBe(1);
+  });
+  test("retains mask children and warns on unsupported mask geometry", () => {
+    const root = demoFrame(), mask = node("VECTOR", "mask", "Mask", 20, 20, 100, 100, { isMask: true });
+    const child = node("RECTANGLE", "inside", "Inside_frame", 30, 30, 20, 20);
+    mask.parent = root; child.parent = root; root.children = [mask, child];
+    const ir = extract(root);
+    expect(ir.root.children[0].kind).toBe("clip"); expect(ir.root.children[0].children[0].name).toBe("Inside");
+    expect(ir.warnings[0]).toContain("mask approximated");
+  });
+  test("resamples linear gradient endpoints and opacity", () => {
+    const gradient = linearGradient({ gradientTransform: [[1, 0, 0], [0, 1, 0]], opacity: 0.5,
+      gradientStops: [{ position: 0, color: { r: 1, g: 0, b: 0, a: 1 } }, { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } }] });
+    expect(gradient.rot).toBe(0); expect(gradient.keys).toEqual([[0, 1, 0, 0, 0.5], [1, 0, 0, 1, 0.5]]);
   });
 });
 

@@ -1,5 +1,5 @@
 --!strict
--- FrameFig builder: turns FrameFig IR (from figma/extract.js) into Roblox UI.
+-- Figlo builder: turns Figlo IR (from figma/extract.js) into Roblox UI.
 -- Every position and size is Scale-based, relative to the parent, with
 -- AnchorPoint 0.5 so rotation pivots match Figma.
 
@@ -14,8 +14,8 @@ export type Options = {
 	imageSizes: { [string]: Vector2 }?, -- source pixel size for tiled image fills
 	parent: Instance,
 	name: string?,
-	runtime: ModuleScript?, -- FrameFigRuntime to embed
-	client: LocalScript?, -- FrameFigClient to embed
+	runtime: ModuleScript?, -- FigloRuntime to embed
+	client: LocalScript?, -- FigloClient to embed
 }
 
 local WEIGHTS = {
@@ -527,7 +527,7 @@ end
 function Builder.build(ir: any, opts: Options): (ScreenGui, { string })
 	local warnings = table.clone(ir.warnings or {})
 	local gui = Instance.new("ScreenGui")
-	gui.Name = opts.name or ("FrameFig_" .. ir.root.name)
+	gui.Name = opts.name or ("Figlo_" .. ir.root.name)
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = true
 	gui.ResetOnSpawn = false
@@ -549,12 +549,12 @@ function Builder.build(ir: any, opts: Options): (ScreenGui, { string })
 
 	if opts.runtime then
 		local rt = opts.runtime:Clone()
-		rt.Name = "FrameFigRuntime"
+		rt.Name = "FigloRuntime"
 		rt.Parent = gui
 	end
 	if opts.client then
 		local cl = opts.client:Clone()
-		cl.Name = "FrameFigClient"
+		cl.Name = "FigloClient"
 		cl.Parent = gui
 	end
 	gui.Parent = opts.parent

@@ -1,4 +1,4 @@
 @echo off
-title FrameFig relay
+title Figlo relay
 bun "%~dp0relay.ts"
 pause

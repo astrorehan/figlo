@@ -1,162 +1,82 @@
-// FrameFig local relay. The Figma plugin pushes one export (IR + raw RGBA images)
-// and gets a short code; the Studio plugin pulls it with that code.
-// Run: bun relay/relay.ts   (listens on 127.0.0.1 only)
-//
-// Every push is also written to relay/.sessions/<CODE>.ffp, so a code still works
-// after the relay restarts (kept for DISK_TTL_MS).
+// Local paired relay. Never bind this service to a public interface.
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { SessionStore } from "./store";
+import { LIMITS } from "./protocol";
 
-import { mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
-
-const PORT = Number(process.env.FRAMEFIG_PORT ?? 34880);
-const TTL_MS = 60 * 60 * 1000; // in memory
-const DISK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const DISK = new URL("./.sessions/", import.meta.url);
-mkdirSync(DISK, { recursive: true });
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
-
-type Img = { key: string; w: number; h: number; nw?: number; nh?: number; sha: string; data: Uint8Array };
-type Session = { ir: string; images: Img[]; at: number };
-
-const sessions = new Map<string, Session>();
-
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "*",
-  "Access-Control-Allow-Private-Network": "true",
-};
-
-function reply(body: BodyInit | null, status = 200, type = "application/json") {
-  return new Response(body, { status, headers: { ...CORS, "Content-Type": type } });
-}
-
-function newCode(): string {
-  for (;;) {
-    let c = "";
-    for (const b of crypto.getRandomValues(new Uint8Array(6))) c += ALPHABET[b % ALPHABET.length];
-    if (!sessions.has(c)) return c;
-  }
-}
-
-function sweep() {
-  const now = Date.now();
-  for (const [c, s] of sessions) if (now - s.at > TTL_MS) sessions.delete(c);
-}
-
-function sweepDisk() {
-  const now = Date.now();
-  for (const f of readdirSync(DISK)) {
-    const p = new URL(f, DISK);
-    if (now - statSync(p).mtimeMs > DISK_TTL_MS) unlinkSync(p);
-  }
-}
-
-async function store(buf: Uint8Array): Promise<string> {
-  sweep();
-  const s = parsePush(buf);
-  const code = newCode();
-  sessions.set(code, s);
-  await Bun.write(new URL(`${code}.ffp`, DISK), buf);
-  return code;
-}
-
-// A code from before a restart: reload it from disk.
-async function lookup(code: string): Promise<Session | undefined> {
-  const hit = sessions.get(code);
-  if (hit) return hit;
-  if (!/^[A-Z0-9]{6}$/.test(code)) return undefined;
-  const f = Bun.file(new URL(`${code}.ffp`, DISK));
-  if (!(await f.exists())) return undefined;
-  const s = parsePush(new Uint8Array(await f.arrayBuffer()));
-  sessions.set(code, s);
-  return s;
-}
-
-// Push format: "FFP1", u32 LE json length, json {ir, images:[{key,w,h,nw?,nh?}]}, then
-// each image's w*h*4 RGBA bytes back to back in the same order.
-function parsePush(buf: Uint8Array): Session {
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  if (new TextDecoder().decode(buf.subarray(0, 4)) !== "FFP1") throw new Error("bad magic");
-  const jsonLen = view.getUint32(4, true);
-  const head = JSON.parse(new TextDecoder().decode(buf.subarray(8, 8 + jsonLen)));
-  let off = 8 + jsonLen;
-  const images: Img[] = [];
-  for (const im of head.images) {
-    const len = im.w * im.h * 4;
-    if (off + len > buf.byteLength) throw new Error(`image ${im.key} truncated`);
-    const data = buf.slice(off, off + len);
-    off += len;
-    const sha = new Bun.CryptoHasher("sha1").update(data).digest("hex");
-    images.push({ key: im.key, w: im.w, h: im.h, nw: im.nw, nh: im.nh, sha, data });
-  }
-  return { ir: typeof head.ir === "string" ? head.ir : JSON.stringify(head.ir), images, at: Date.now() };
-}
-
-async function handle(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (req.method === "OPTIONS") return reply(null, 204);
+export function createHandler(store: SessionStore, token: string, port: number) {
+  const allowedOrigins = new Set(["null", "https://www.figma.com", "https://figma.com"]);
+  return async function handle(req: Request): Promise<Response> {
+    const url = new URL(req.url), origin = req.headers.get("Origin");
+    const headers: Record<string, string> = { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Vary": "Origin" };
+    const reply = (value: any, status = 200) => new Response(JSON.stringify(value), { status, headers });
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || Number(url.port || (url.protocol === "https:" ? 443 : 80)) !== port) return reply({ error: "invalid relay host" }, 403);
+    if (origin !== null && !allowedOrigins.has(origin)) return reply({ error: "origin not allowed" }, 403);
+    if (origin !== null) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS";
+      headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+      headers["Access-Control-Allow-Private-Network"] = "true";
+    }
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+    if (url.pathname === "/ping" && req.method === "GET") return reply({ ok: true, app: "figlo-relay", v: 1 });
+    const actual = Buffer.from(req.headers.get("Authorization") ?? ""), expected = Buffer.from("Bearer " + token);
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return reply({ error: "relay token missing or incorrect" }, 401);
     try {
-      if (parts[0] === "ping") return reply(JSON.stringify({ ok: true, app: "framefig-relay", v: 1 }));
-
-      // Studio module sources, so a dev copy in Studio can be synced without the plugin.
+      if (url.pathname === "/push" && req.method === "POST") {
+        if (Number(req.headers.get("Content-Length")) > LIMITS.request) return reply({ error: "export exceeds 64 MiB" }, 413);
+        const reader = req.body?.getReader(), chunks: Uint8Array[] = [];
+        let bytes = 0;
+        if (reader) for (;;) {
+          const { done, value } = await reader.read(); if (done) break;
+          bytes += value.byteLength;
+          if (bytes > LIMITS.request) { await reader.cancel(); return reply({ error: "export exceeds 64 MiB" }, 413); }
+          chunks.push(value);
+        }
+        const body = new Uint8Array(bytes); let off = 0;
+        for (const chunk of chunks) { body.set(chunk, off); off += chunk.byteLength; }
+        return reply({ code: store.put(body) });
+      }
+      const parts = url.pathname.split("/").filter(Boolean);
       if (parts[0] === "src" && req.method === "GET") {
         const rel = parts.slice(1).join("/");
-        if (!/^[\w/.]+\.luau$/.test(rel) || rel.includes("..")) return reply(JSON.stringify({ error: "bad path" }), 400);
-        const f = Bun.file(new URL(`../studio/src/${rel}`, import.meta.url));
-        if (!(await f.exists())) return reply(JSON.stringify({ error: "not found" }), 404);
-        return reply(await f.text(), 200, "text/plain");
+        if (!/^(?:\w+\/)*\w+(?:\.(?:client|server))?\.luau$/.test(rel)) return reply({ error: "invalid source path" }, 400);
+        const f = Bun.file(new URL("../studio/src/" + rel, import.meta.url));
+        if (!(await f.exists())) return reply({ error: "not found" }, 404);
+        return new Response(await f.text(), { headers: { ...headers, "Content-Type": "text/plain" } });
       }
-
-      if (req.method === "POST" && parts[0] === "push") {
-        const code = await store(new Uint8Array(await req.arrayBuffer()));
-        const s = sessions.get(code)!;
-        const mb = s.images.reduce((n, i) => n + i.data.byteLength, 0) / 1e6;
-        console.log(`push ${code}: ${s.images.length} images, ${mb.toFixed(1)} MB`);
-        return reply(JSON.stringify({ code }));
+      const code = parts[1]?.toUpperCase();
+      if (parts[0] === "exports" && parts.length === 2 && req.method === "DELETE") return reply({ deleted: store.delete(code ?? "") });
+      if ((parts[0] === "pull" && parts.length === 2 || parts[0] === "img" && parts.length === 3) && req.method === "GET") {
+        const session = code && store.get(code);
+        if (!session) return reply({ error: "unknown or expired code" }, 404);
+        if (parts[0] === "pull") return reply({ ir: session.ir, images: session.images.map(({ data, ...im }, i) => ({ ...im, i })) });
+        if (!/^(0|[1-9]\d*)$/.test(parts[2])) return reply({ error: "invalid image index" }, 400);
+        const image = session.images[Number(parts[2])];
+        if (!image) return reply({ error: "image not found" }, 404);
+        return new Response(image.data, { headers: { ...headers, "Content-Type": "application/octet-stream" } });
       }
-
-      // Same push as a top-level form navigation (multipart field "ffp"). Browsers that
-      // block fetch() from a public page to loopback still allow this.
-      if (req.method === "POST" && parts[0] === "push-form") {
-        const file = (await req.formData()).get("ffp");
-        if (!(file instanceof Blob)) return reply("missing ffp field", 400, "text/plain");
-        const code = await store(new Uint8Array(await file.arrayBuffer()));
-        const s = sessions.get(code)!;
-        const mb = s.images.reduce((n, i) => n + i.data.byteLength, 0) / 1e6;
-        console.log(`push ${code}: ${s.images.length} images, ${mb.toFixed(1)} MB (form)`);
-        return reply(`<!doctype html><title>FrameFig ${code}</title><h1 id="code">${code}</h1>`, 200, "text/html");
-      }
-
-      const s = parts[1] ? await lookup(parts[1].toUpperCase()) : undefined;
-      if (parts[0] === "pull" && req.method === "GET") {
-        if (!s) return reply(JSON.stringify({ error: "unknown or expired code" }), 404);
-        const images = s.images.map((im, i) => ({ i, key: im.key, w: im.w, h: im.h, nw: im.nw, nh: im.nh, sha: im.sha }));
-        return reply(`{"ir":${s.ir},"images":${JSON.stringify(images)}}`);
-      }
-
-      if (parts[0] === "img" && req.method === "GET") {
-        const im = s && s.images[Number(parts[2])];
-        if (!im) return reply(JSON.stringify({ error: "not found" }), 404);
-        return reply(im.data, 200, "application/octet-stream");
-      }
-
-      return reply(JSON.stringify({ error: "not found" }), 404);
+      return reply({ error: "not found" }, 404);
     } catch (e) {
-      console.error(e);
-      return reply(JSON.stringify({ error: String((e as Error).message ?? e) }), 400);
+      const message = e instanceof Error ? e.message : "request failed";
+      return reply({ error: /quota reached/.test(message) ? message : "invalid export or request" }, /quota reached/.test(message) ? 507 : 400);
     }
+  };
 }
-
-// Loopback only, on both stacks: "localhost" may resolve to ::1 (Figma) or 127.0.0.1 (Studio).
-for (const hostname of ["127.0.0.1", "::1"]) {
-  try {
-    Bun.serve({ hostname, port: PORT, maxRequestBodySize: 512 * 1024 * 1024, fetch: handle });
-  } catch (e) {
-    if (hostname === "127.0.0.1") throw e;
-    console.warn(`IPv6 loopback unavailable: ${(e as Error).message}`);
+if (import.meta.main) {
+  const port = Number(process.env.FIGLO_PORT ?? 34880);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("FIGLO_PORT must be in 1024..65535");
+  const token = process.env.FIGLO_TOKEN ?? randomBytes(32).toString("hex");
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) throw new Error("FIGLO_TOKEN must contain 32..128 letters, digits, underscores or hyphens");
+  const dir = process.env.FIGLO_SESSIONS ? resolve(process.env.FIGLO_SESSIONS) : fileURLToPath(new URL("./.sessions/", import.meta.url));
+  const store = new SessionStore(dir), servers = [];
+  for (const hostname of ["127.0.0.1", "::1"]) {
+    try { servers.push(Bun.serve({ hostname, port, maxRequestBodySize: LIMITS.request, fetch: createHandler(store, token, port) })); }
+    catch (e) { if (hostname === "127.0.0.1") throw e; console.warn("IPv6 loopback unavailable; use 127.0.0.1"); }
   }
+  const timer = setInterval(() => { try { store.sweep(); } catch { console.warn("Export cleanup failed; check session directory permissions"); } }, 60000);
+  console.log(`Figlo relay: http://localhost:${port}\nPairing token (keep private): ${token}\nExports stay on this computer for up to 7 days.`);
+  const stop = () => { clearInterval(timer); for (const server of servers) server.stop(true); process.exit(0); };
+  process.on("SIGINT", stop); process.on("SIGTERM", stop);
 }
-
-sweepDisk();
-console.log(`FrameFig relay on http://localhost:${PORT}`);

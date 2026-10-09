@@ -1,4 +1,4 @@
--- Inserted into every FrameFig ScreenGui next to the FrameFigRuntime module.
+-- Inserted into every Figlo ScreenGui next to the FigloRuntime module.
 -- Starts the ScreenGui itself when it is an import, and every page Folder inside it
 -- (a ScreenGui with several pages keeps one import per Folder).
 -- The plugin carries a template copy of this script; only run inside a built ScreenGui.
@@ -6,7 +6,7 @@ local gui = script.Parent
 if not gui:IsA("ScreenGui") then
 	return
 end
-local Runtime = require(gui:WaitForChild("FrameFigRuntime"))
+local Runtime = require(gui:FindFirstChild("FigloRuntime") or gui:WaitForChild("FrameFigRuntime"))
 if gui:GetAttribute("FF_Root") then
 	Runtime.watch(gui)
 end

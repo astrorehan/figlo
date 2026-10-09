@@ -13,7 +13,7 @@ async function ffToRGBA(bytes) {
 async function ffExportBytes(info) {
   if (info.kind === 'hash') return imageFillBytes(info.hash);
   const node = figma.getNodeById(info.node);
-  const scale = Math.min(1, FF_MAX / Math.max(info.w, info.h, 1));
+  const scale = Math.min(info.scale || 1, FF_MAX / Math.max(info.w, info.h, 1));
   const opts = { format: 'PNG', constraint: { type: 'SCALE', value: scale } };
   if (info.kind === 'shadow' && 'children' in node && node.children.length) {
     const c = childlessClone(node);

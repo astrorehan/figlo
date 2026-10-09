@@ -11,7 +11,7 @@ Each tag's values are edited in the Figma plugin's **Effects** tab and saved on 
 `FF_<tag> = false` switches an effect off for one object. Re-importing keeps values changed in
 Studio (see the README).
 
-The effects run in `studio/src/Runtime/Effects.luau`, started by `FrameFigClient` in Play.
+The effects run in `studio/src/Runtime/Effects.luau`, started by `FigloClient` in Play.
 
 Any other lowercase suffix that looks like a tag (`Rays_breath`) produces an import warning, so a
 typo is not silently ignored.
@@ -21,7 +21,7 @@ typo is not silently ignored.
 - **Scale.** Every object has at most one `UIScale` (`FF_Scale`). Its value is the text-fit
   factor times one factor per channel (`button`, `idle`, `pop`, `stagger`), so a button that
   pulses and is hovered does not fight itself. Roblox honours only one UIScale per object: to
-  scale a FrameFig object from your own code, call `Runtime.setFxScale(obj, k, "mychannel")` or
+  scale a Figlo object from your own code, call `Runtime.setFxScale(obj, k, "mychannel")` or
   scale a wrapper.
 - **Position and rotation** work the same way (`Runtime.setFxOffset`, `Runtime.setFxRotation`):
   the object sits at its Figma place plus the sum of its channels (float, lift, slide, sway...).
@@ -51,14 +51,13 @@ effects stop reacting, navigation tags do nothing, and `_when:locked` layers sho
 handlers still fire, so check the attribute there too). `active` is set by `_goto` (below) or by
 your code with `FF_Active`.
 
-The default sounds are public Creator Store audio (hover `139800881181209`, click
-`102702078778790`).
+Sounds are silent by default. Supply audio IDs your experience has permission to use.
 
 ## Navigation
 
 These make the layer a button and act when it is clicked. Names are looked up in the button's
 ScreenGui: first a page (the ScreenGui's own frame, or a frame added with **Import as page**), then
-any layer of that name, then another ScreenGui beside it named `<name>` or `FrameFig_<name>`.
+any layer of that name, then another ScreenGui beside it named `<name>` or `Figlo_<name>`.
 
 | Tag | What it does |
 |---|---|
@@ -139,6 +138,7 @@ Each plays whenever the layer becomes visible (page shown, ScreenGui enabled), i
 | `_stack` | on an auto-layout frame: a `UIListLayout` (+ `UIPadding`) with Figma's direction, gap, padding and alignment, so rows your code clones in line up |
 | `_tiles` | on a wrapping auto-layout frame: a `UIGridLayout` with the first child's size as the cell |
 | `_nodim` | inside a `_button`: this image does not darken |
+| `_native` | images inside keep their design pixels (icon sheets whose ids your code shows at other sizes); see "Sharp images" in `docs/findings.md` |
 
 Children of `_stack`/`_tiles` should not have drop shadows (each shadow is its own Roblox object
 and would take a cell); bake them with `_image`. Roblox layouts ignore `AnchorPoint` and place

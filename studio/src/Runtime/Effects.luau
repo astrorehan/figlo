@@ -1,5 +1,5 @@
 --!strict
--- FrameFig effects: brings the Figma name tags to life in game.
+-- Figlo effects: brings the Figma name tags to life in game.
 --
 -- Every tagged layer carries FF_<tag> = true (or the value after the colon, as in
 -- `_goto:Shop`) plus its values as FF_<tag>_<key> (set in the Figma plugin's
@@ -16,8 +16,8 @@ local Effects = {}
 
 local DEFAULTS = {
 	button = { hoverDim = 0.8, pressDim = 0.62 },
-	-- Sounds: free Creator Store audio; set the id to 0 (or empty) for silence.
-	smooth = { hover = 1.08, press = 0.9, time = 0.15, hoverSound = "139800881181209", clickSound = "102702078778790" },
+	-- Supply audio your experience can use; silent by default.
+	smooth = { hover = 1.08, press = 0.9, time = 0.15, hoverSound = "0", clickSound = "0" },
 	shiny = { time = 0.7, cooldown = 2, width = 0.32, opacity = 0.9, angle = 25 },
 	gleam = { time = 0.8, cooldown = 2, width = 0.22 },
 	drift = { speed = 40, angle = 270 },
@@ -43,7 +43,7 @@ local DEFAULTS = {
 	stagger = { gap = 0.06, from = 0, time = 0.25 },
 }
 
--- The layer plus the images FrameFig split off it (drop shadow, baked background),
+-- The layer plus the images Figlo split off it (drop shadow, baked background),
 -- so motion moves the whole look, not just the live part.
 local function companions(obj: Instance): { Instance }
 	local list = { obj }
@@ -158,7 +158,7 @@ local function pressOf(obj: GuiObject): Press
 		for _, fn in st.listeners do
 			local ok, err = pcall(fn)
 			if not ok then
-				warn("[FrameFig] " .. tostring(err))
+				warn("[Figlo] " .. tostring(err))
 			end
 		end
 	end
@@ -339,19 +339,19 @@ local STATES = { hover = true, press = true, rest = true, locked = true, active 
 local function whenState(obj: GuiObject)
 	local want = obj:GetAttribute("FF_when")
 	if type(want) ~= "string" then
-		warn("[FrameFig] _when needs a state, e.g. _when:hover: " .. obj:GetFullName())
+		warn("[Figlo] _when needs a state, e.g. _when:hover: " .. obj:GetFullName())
 		return
 	end
 	local set = {}
 	for word in want:lower():gmatch("%a+") do
 		if not STATES[word] then
-			warn(("[FrameFig] _when: unknown state %q on %s (hover, press, rest, locked, active)"):format(word, obj:GetFullName()))
+			warn(("[Figlo] _when: unknown state %q on %s (hover, press, rest, locked, active)"):format(word, obj:GetFullName()))
 		end
 		set[word] = true
 	end
 	local btn = buttonAbove(obj)
 	if not btn then
-		warn("[FrameFig] _when must sit inside a button: " .. obj:GetFullName())
+		warn("[Figlo] _when must sit inside a button: " .. obj:GetFullName())
 		return
 	end
 	local b = btn :: GuiButton
@@ -366,7 +366,7 @@ end
 -- --- navigation: _goto, _show, _hide, _switch ----------------------------------------
 -- Names are looked up in the button's ScreenGui: a page (a Folder imported with
 -- "Import as page", or the ScreenGui's own frame), then any layer of that name; then
--- another ScreenGui beside it, named as given or FrameFig_<name>.
+-- another ScreenGui beside it, named as given or Figlo_<name>.
 
 type Target = { kind: string, inst: Instance }
 
@@ -407,7 +407,7 @@ local function resolve(from: Instance, name: string): Target?
 	end
 	local holder = sg.Parent
 	if holder then
-		local other = holder:FindFirstChild(name) or holder:FindFirstChild("FrameFig_" .. name)
+		local other = holder:FindFirstChild(name) or holder:FindFirstChild("Figlo_" .. name)
 		if other and other:IsA("LayerCollector") then
 			return { kind = "gui", inst = other }
 		end
@@ -433,7 +433,7 @@ end
 local function gotoTarget(btn: GuiButton, name: string)
 	local t = resolve(btn, name)
 	if not t then
-		warn(("[FrameFig] _goto: nothing named %q near %s"):format(name, btn:GetFullName()))
+		warn(("[Figlo] _goto: nothing named %q near %s"):format(name, btn:GetFullName()))
 		return
 	end
 	local sg = screenOf(btn) :: LayerCollector
@@ -479,7 +479,7 @@ local function navigation(btn: GuiButton)
 				if t then
 					setShown(t, if pair[2] then true else not isShown(t))
 				else
-					warn(("[FrameFig] nothing named %q near %s"):format(name, btn:GetFullName()))
+					warn(("[Figlo] nothing named %q near %s"):format(name, btn:GetFullName()))
 				end
 			end
 		end
@@ -489,7 +489,7 @@ local function navigation(btn: GuiButton)
 				if t then
 					setShown(t, false)
 				else
-					warn(("[FrameFig] _hide: nothing named %q near %s"):format(hideName, btn:GetFullName()))
+					warn(("[Figlo] _hide: nothing named %q near %s"):format(hideName, btn:GetFullName()))
 				end
 			else
 				local sg = screenOf(btn)
@@ -605,7 +605,7 @@ local function shiny(obj: GuiObject): Tick?
 		return sweep(obj)
 	end
 	if obj:IsA("TextLabel") or obj.BackgroundTransparency >= 1 then
-		warn("[FrameFig] _shiny needs a shape layer (rectangle or frame with a fill): " .. obj:GetFullName())
+		warn("[Figlo] _shiny needs a shape layer (rectangle or frame with a fill): " .. obj:GetFullName())
 		return nil
 	end
 	local time = math.max(0.05, param(obj, "shiny", "time"))
@@ -629,7 +629,7 @@ end
 local function sheen(obj: GuiObject)
 	local image = obj:IsA("ImageLabel") or obj:IsA("ImageButton")
 	if obj:IsA("TextLabel") or (not image and obj.BackgroundTransparency >= 1) then
-		warn("[FrameFig] _sheen needs a shape layer (rectangle, frame with a fill, or image): " .. obj:GetFullName())
+		warn("[Figlo] _sheen needs a shape layer (rectangle, frame with a fill, or image): " .. obj:GetFullName())
 		return
 	end
 	local time = math.max(0.05, param(obj, "sheen", "time"))
@@ -667,7 +667,7 @@ end
 
 local function gleam(label: TextLabel, gui: Instance, runtime: any): Tick?
 	if not (label:IsA("TextLabel") or label:IsA("TextButton")) then
-		warn("[FrameFig] _gleam works on text layers: " .. label:GetFullName())
+		warn("[Figlo] _gleam works on text layers: " .. label:GetFullName())
 		return nil
 	end
 	local time = math.max(0.05, param(label, "gleam", "time"))
@@ -748,7 +748,7 @@ end
 
 local function drift(image: ImageLabel, gui: Instance, runtime: any): Tick?
 	if not image:IsA("ImageLabel") or image.ScaleType ~= Enum.ScaleType.Tile then
-		warn("[FrameFig] _drift needs a tiled image fill: " .. image:GetFullName())
+		warn("[Figlo] _drift needs a tiled image fill: " .. image:GetFullName())
 		return nil
 	end
 	local tx, ty = image.TileSize.X.Scale, image.TileSize.Y.Scale
@@ -903,7 +903,7 @@ end
 -- Squash and stretch by resizing (UIScale is uniform, so it cannot squash).
 local function wobble(obj: GuiObject): Tick?
 	if obj:GetAttribute("FF_TextPx") then
-		warn("[FrameFig] _wobble works on frames and images, not text: " .. obj:GetFullName())
+		warn("[Figlo] _wobble works on frames and images, not text: " .. obj:GetFullName())
 		return nil
 	end
 	local amp = param(obj, "wobble", "amp")
@@ -1022,7 +1022,7 @@ end
 local function tide(obj: GuiObject): Tick?
 	local g = obj:FindFirstChildWhichIsA("UIGradient")
 	if not g then
-		warn("[FrameFig] _tide needs a gradient fill: " .. obj:GetFullName())
+		warn("[Figlo] _tide needs a gradient fill: " .. obj:GetFullName())
 		return nil
 	end
 	local grad = g :: UIGradient
@@ -1387,7 +1387,7 @@ function Effects.start(gui: Instance, runtime: any)
 	local function try(obj: Instance, name: string, fn: () -> Tick?, into: { Tick }?)
 		local ok, result = pcall(fn)
 		if not ok then
-			warn(("[FrameFig] _%s on %s: %s"):format(name, obj:GetFullName(), tostring(result)))
+			warn(("[Figlo] _%s on %s: %s"):format(name, obj:GetFullName(), tostring(result)))
 		elseif result then
 			table.insert(into or ticks, result)
 		end
@@ -1487,7 +1487,7 @@ function Effects.start(gui: Instance, runtime: any)
 			local ok, err = pcall(tick, dt)
 			if not ok and not failed then
 				failed = true
-				warn("[FrameFig] effect error: " .. tostring(err))
+				warn("[Figlo] effect error: " .. tostring(err))
 			end
 		end
 	end)

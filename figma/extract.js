@@ -1,13 +1,25 @@
-// FrameFig extractor: turns one Figma node into FrameFig IR (plain JSON).
+// Figlo extractor: turns one Figma node into Figlo IR (plain JSON).
 // Runs inside the Figma plugin sandbox, or pasted into the Figma web console
 // where the `figma` global is available. It only reads the document.
 
 const FF_IR_VERSION = 1;
 
+// The screen images are sized for. A root fills the ScreenGui with its aspect kept,
+// so on this screen it shows at min(w / design w, h / design h) of its design size.
+// Roblox mipmaps every uploaded image and blends in the half-size level as soon as it
+// is drawn smaller than its pixels, so an image is crispest when its pixels match
+// what it covers on screen: baked images are exported at that scale (at most
+// MAX_OVERSAMPLE), and the importer shrinks them further for a root resized in Studio.
+// `_native` on a frame keeps design pixels for the images inside it (icon sheets
+// whose ids are used by code at other sizes).
+const FF_SCREEN = { w: 1920, h: 1080 };
+const MAX_OVERSAMPLE = 2;
+
 // Name suffixes we understand. `_a_b` → tags {a, b}; `_goto:Shop` → {goto: "Shop"}.
 const KNOWN_TAGS = new Set([
   // structure
   'image', 'img', 'lock', 'frame', 'txt', 'keep', 'ignore', 'scroll', 'nodim', 'ratio', 'group', 'stack', 'tiles',
+  'native',
   // buttons, button states and navigation
   'button', 'smooth', 'when', 'goto', 'show', 'hide', 'switch',
   // idle motion
@@ -34,8 +46,8 @@ const EFFECTS = {
     hover: { label: 'Hover scale', def: 1.08, min: 1, max: 1.3, step: 0.01 },
     press: { label: 'Press scale', def: 0.9, min: 0.6, max: 1, step: 0.01 },
     time: { label: 'Tween time (s)', def: 0.15, min: 0.02, max: 1, step: 0.01 },
-    hoverSound: { label: 'Hover sound id (0 = off)', def: '139800881181209', type: 'text' },
-    clickSound: { label: 'Click sound id (0 = off)', def: '102702078778790', type: 'text' },
+    hoverSound: { label: 'Hover sound id (0 = off)', def: '0', type: 'text' },
+    clickSound: { label: 'Click sound id (0 = off)', def: '0', type: 'text' },
   } },
   shiny: { hint: 'A light band sweeps across this shape (keeps its rounded corners, stays under its text).', params: {
     time: { label: 'Sweep time (s)', def: 0.7, min: 0.1, max: 5, step: 0.05 },
@@ -147,7 +159,7 @@ const EFFECTS = {
   // Tags whose value lives in the name (`_goto:Shop`); the plugin edits it as text.
   when: { hint: "Shown only in one state of the button it sits in: hover, press, rest, locked or active (several: hover|press).", value: 'State', params: {} },
   goto: { hint: 'Button: shows the named page (or layer) and hides its sibling pages.', value: 'Page or layer', params: {} },
-  show: { hint: 'Button: shows the named layer, page or FrameFig ScreenGui.', value: 'Layer', params: {} },
+  show: { hint: 'Button: shows the named layer, page or Figlo ScreenGui.', value: 'Layer', params: {} },
   hide: { hint: 'Button: hides the named layer; with no name, closes its ScreenGui.', value: 'Layer (optional)', params: {} },
   switch: { hint: 'Button: shows the named layer if hidden, hides it if shown.', value: 'Layer', params: {} },
   // Structure, no values.
@@ -514,7 +526,7 @@ function childlessClone(n) {
   return clone;
 }
 
-// Frame-level looks FrameFig cannot draw natively but that do not touch the
+// Frame-level looks Figlo cannot draw natively but that do not touch the
 // children: bake them into a background image and keep the children live.
 const BG_REASONS = /inner shadow|background blur|fill|stroke|mixed corner radius|shadow behind node/;
 
@@ -865,15 +877,30 @@ function extract(rootNode) {
     if (cornerOf(rootNode).value) rootIr.radius = rootNode.cornerRadius;
   }
   rootIr.children = buildChildren(rootNode, rootBox);
+
+  // Export scale per image; `_native` (on any ancestor) keeps design pixels.
+  const fit = Math.min(MAX_OVERSAMPLE, FF_SCREEN.w / rb.width, FF_SCREEN.h / rb.height);
+  for (const info of images.values()) info.scale = fit;
+  (function markNative(n, native) {
+    native = native || !!(n.tags && n.tags.native);
+    if (native && n.kind === 'image' && n.image) {
+      n.native = true;
+      const info = images.get(n.image);
+      if (info) info.scale = 1;
+    }
+    for (const c of n.children || []) markNative(c, native);
+  })(rootIr, false);
+
   for (const [tag, names] of unknownTags) {
     const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? `, +${names.length - 3} more` : '');
-    warnings.push(`_${tag} is not a FrameFig tag, kept in the name (${shown})`);
+    warnings.push(`_${tag} is not a Figlo tag, kept in the name (${shown})`);
   }
 
   return {
     v: FF_IR_VERSION,
     source: { file: figma.fileKey || null, node: rootNode.id, name: rootNode.name },
     design: { w: rb.width, h: rb.height },
+    screen: FF_SCREEN,
     root: rootIr,
     images: Object.fromEntries(images),
     fonts: [...fontsUsed],

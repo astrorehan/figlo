@@ -1,0 +1,12 @@
+{
+  "name": "FigloVerification",
+  "tree": {
+    "$className": "DataModel",
+    "HttpService": { "$properties": { "HttpEnabled": true } },
+    "ServerStorage": {
+      "FigloModules": { "$path": "../studio/src" }
+    },
+    "StarterGui": { "$className": "StarterGui" },
+    "Workspace": { "$className": "Workspace" }
+  }
+}
