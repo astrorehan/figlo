@@ -35,7 +35,7 @@ Image imports also require an account with the relevant asset API permissions.
 
 ## 4. Try an import
 
-In Figma, choose **Create demo frame**, select it, and press **Export to Roblox**.
+In Figma, choose **Create demo frame** (it is selected for you) and press **Export to Roblox**.
 Copy the six-character export code into Studio's Figlo panel and choose **Import**.
 Find the result under `StarterGui`. Play to check it, then save the place.
 

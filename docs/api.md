@@ -1,11 +1,12 @@
 # Script and runtime APIs
 
-Place the modules from `studio/src` into a Folder through Rojo/Argon, retaining the
-`Runtime/Effects` child and `Client` LocalScript. Required importer siblings are
-`Builder`, `Crisp`, `FontMetrics`, `ImageKey` and `Protocol`.
+Sync the modules from `studio/src` into a Folder through Rojo/Argon (these guides use
+`ServerStorage.FigloModules`), retaining the `Runtime/Effects` child and `Client`
+LocalScript. Required importer siblings are `Builder`, `Crisp`, `FontMetrics`, `ImageKey`
+and `Protocol`.
 
 ```lua
-local ff = game.ServerStorage.Figlo
+local ff = game.ServerStorage.FigloModules
 local Importer = require(ff.Importer)
 local gui, warnings = Importer.run("ABCDEF", {
     parent = game.StarterGui,
@@ -33,7 +34,6 @@ Folder to use the new source.
 The embedded Runtime provides `watch(container)`, `attach(object)`, `apply(container)`,
 `setFxScale(object, value, channel)`, `setFxOffset(object, x, y, channel)` and
 `setFxRotation(object, degrees, channel)`. Use `FF_Locked` and `FF_Active` for button states.
-
 
 ## Existing imports
 

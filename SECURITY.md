@@ -20,7 +20,7 @@ after shutdown they are cleaned up at the next startup.
 Roblox asset creation and moderation are external operations. Canceling an
 import or undoing place changes does not delete assets already uploaded.
 
-For a vulnerability, use the repository host's private vulnerability reporting
-feature once enabled by the maintainer. If that feature is not available,
-contact the maintainer privately before posting exploit details. Do not attach
-tokens, private exports or account cookies to a public issue.
+Report a vulnerability privately through
+[GitHub's private vulnerability reporting](https://github.com/astrorehan/figlo/security/advisories/new).
+Do not post exploit details in a public issue, and do not attach tokens, private
+exports or account cookies to any report.

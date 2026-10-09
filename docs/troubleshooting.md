@@ -10,10 +10,10 @@
 | Images are blank | New assets may be under moderation. Existing assets can also be inaccessible to the experience. Verify ownership/permissions and moderation in Creator Dashboard; waiting alone does not fix every failure. |
 | Text differs from Figma | Check font availability, fallback warnings, viewport size and text wrapping. See compatibility limits. |
 | Old code runs after source sync | Studio caches `require`. Require a fresh clone of the complete module Folder. |
-| Import as page does nothing | Select the imported ScreenGui, not its root Frame. |
+| "Select a ScreenGui made by Figlo first" | **Import as page** needs the imported ScreenGui selected, not its root Frame or a ScreenGui Figlo did not create. |
 | Cannot start Undo recording | The plugin and `ImportAction` wrapper require a recording. Finish other recordings and retry. Direct `Importer.run`/`start` calls do not use this wrapper and do not provide its recorded rollback. |
 | Button is silent | Default audio is off. Set an audio ID your experience has permission to use in Effects. |
-| Browser-console export fails | Use the Figma desktop development plugin. The optional browser path depends on an available `figma` global and browser clipboard permissions. |
+| Browser-console export fails | Use the Figma desktop development plugin. The optional browser path needs the `figma` global in the editor tab; check `window.__ffstatus.error`. Clipboard permission matters only if you copy with `__ffcopy()` instead of reading `window.__ffb64`. |
 
 Never paste pairing tokens or private exports into issue reports. Include tool
 versions, sanitized warnings and a minimal frame you own instead.

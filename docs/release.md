@@ -14,7 +14,7 @@ freshness, original-demo freshness, branding and common credential-pattern scans
 Relay tests cover pairing, untrusted origins and rebound hosts, source access,
 binary round trips, invalid dimensions/header/schema/tree depth, duplicate keys,
 truncated/trailing data, chunked request limits, restart persistence, disk quotas,
-access-time expiration, periodic cleanup and explicit deletion.
+expiration seven days after creation, periodic cleanup and explicit deletion.
 
 Importer tests construct actual Lune Roblox instances with injected external
 services. They check native text/buttons, geometry, three successive re-imports,

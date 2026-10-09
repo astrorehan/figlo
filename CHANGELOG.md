@@ -5,7 +5,7 @@
 - Rename the plugins and new imports to Figlo; retain existing import identifiers
   and runtime/client object names during re-import.
 - Add relay pairing, restricted origins and host validation, payload validation,
-  bounded storage/cache, access-time expiration and explicit export deletion.
+  bounded storage/cache, seven-day expiration and explicit export deletion.
 - Keep Studio overrides across repeated imports by snapshotting original values.
 - Partition image cache keys by source/target dimensions and asset owner.
 - Dispose temporary editable images on upload and pixel-write failures.

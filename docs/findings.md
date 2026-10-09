@@ -45,8 +45,9 @@ design is not distributed. `samples/demo.ir.json` is a separate, original fixtur
   premultiplied colour before upload. Images are never enlarged in Studio.
 - `_native` on a frame keeps design pixels for the images inside it: icon sheets whose asset ids
   code reuses at other sizes. Tiled fills keep theirs too.
-- Each upload is cached by pixels and target size (`sha@WxH`), so a re-import at the same size
-  reuses its uploads.
+- Each upload is cached by owner, pixels, source size and target size
+  (`v2:<owner>:<sha>@WxH>WxH`, `studio/src/ImageKey.luau`), so a re-import at the same size for
+  the same owner reuses its uploads.
 
 ## Figma images
 

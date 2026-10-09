@@ -17,8 +17,10 @@ pauses cleanup; the next startup removes expired files. Limits: 64 MiB per reque
 saved data and 64 MiB parsed-session cache. Invalid input is rejected before persistence.
 
 Optional environment variables: `FIGLO_TOKEN` (32-128 letters/digits/underscores/hyphens),
-`FIGLO_PORT` (default 34880), `FIGLO_SESSIONS` (storage directory). The desktop plugin
-panels use port 34880; CLI callers may set `FIGLO_RELAY`. To delete one export early:
+`FIGLO_PORT` (default 34880), `FIGLO_SESSIONS` (storage directory). Both plugin panels
+only connect to port 34880, so changing `FIGLO_PORT` is for CLI and scripted use: set
+`FIGLO_RELAY` for `tools/push_clipboard.ts` and the importer's `relay` option to match.
+To delete one export early:
 
 ```sh
 # Set FIGLO_TOKEN privately in your shell first; do not commit it.

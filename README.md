@@ -56,14 +56,14 @@ Figlo's modules already set up, it can export the frame, send it to the local
 relay, import it in Studio and check the result without you clicking the plugin
 buttons or copying an export code.
 
-This browser-to-Studio workflow has been used with the earlier FrameFig version.
-The current relay also requires a pairing token. A CLI client can use the same
-workflow if it has the required tools; the browser is one of those tools.
+This workflow was used with the earlier FrameFig version; it hasn't been
+repeated end to end with the current relay, which also needs the pairing token.
+CLI clients work too, as long as they have all three connections.
 
 See [the automation guide](docs/studio-mcp.md) for the commands, importer call
 and status checks. Headless Chrome hasn't been tested. The direct importer
-doesn't create the plugin's Undo recording, so that path doesn't offer the same
-rollback behavior as importing through the panel.
+doesn't create the plugin's Undo recording, so a failed import isn't rolled back
+the way it is from the panel.
 
 ## Update an existing import
 

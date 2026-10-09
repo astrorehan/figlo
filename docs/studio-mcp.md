@@ -27,13 +27,17 @@ server using `powershell.exe` with these arguments on Windows:
 ```
 
 Replace the checkout path. The launcher finds Studio's installed MCP executable
-through its Windows registry entry. Skip this if your client already has a
-working Studio connection. Browser tools are configured separately.
+through its Windows registry entry. It was added after 0.1.0-alpha.1, so use a
+repository checkout rather than that release's source ZIP. Skip this if your
+client already has a working Studio connection. Browser tools are configured
+separately.
 
 ## Export the frame
 
-1. Build the browser script with `bun tools/build_page.ts`.
-2. Execute `out/figlo-page.min.js` in the Figma editor through the browser tool.
+1. Build the browser script with `bun tools/build_page.ts`, or download
+   `Figlo-<version>-web.js` from the release.
+2. Execute `out/figlo-page.min.js` (or the downloaded file) in the Figma editor
+   through the browser tool.
 3. Run `await window.__ffrun("<node ID>")`. Use Figma's actual node ID, such as
    `123:456`.
 4. Read `window.__ffstatus`. Continue only when `done` is true and `error` is empty.

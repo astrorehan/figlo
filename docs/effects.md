@@ -109,7 +109,7 @@ transparent button frame).
 
 | Tag | Put it on | What it does | Parameters (default) |
 |---|---|---|---|
-| `_shiny` | a filled shape, or a drawn shine image | a light band sweeps across it, then rests | `time` 0.7, `cooldown` 2, `width` 0.32, `opacity` 0.9, `angle` 25 |
+| `_shiny` | a filled shape, or a drawn shine image | a light band sweeps across it, then rests | `time` 0.7, `cooldown` 2, `width` 0.25, `opacity` 0.5, `angle` 20 |
 | `_gleam` | a text layer | a white light crosses the text fill and outline | `time` 0.8, `cooldown` 2, `width` 0.22 |
 
 ## Entrances
