@@ -9,6 +9,33 @@ Studio MCP execution contexts vary: HTTP access, Studio user identity, asset upl
 permissions and ChangeHistoryService recording must be tested in the chosen client.
 The local plugin remains the supported alpha import interface.
 
+## Local CLI clients on Windows
+
+Both Codex CLI and Claude Code can connect to a local stdio MCP server. Studio
+must remain open and have its MCP connection enabled. With a checkout at
+`D:/figlo`, register Studio's bundled MCP executable using the launcher:
+
+```sh
+codex mcp add roblox-studio -- powershell.exe -NoProfile -NonInteractive -File D:/figlo/tools/studio_mcp.ps1
+claude mcp add --transport stdio roblox-studio -- powershell.exe -NoProfile -NonInteractive -File D:/figlo/tools/studio_mcp.ps1
+```
+
+Replace the checkout path with your own. Register only the client you use, and
+skip registration if a working Studio MCP is already configured. Restart the
+client session and ask it to list connected Studios before importing. The
+launcher finds the installed Studio MCP through Studio's Windows registry entry;
+it is Windows-specific. See the official
+[Codex MCP guide](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
+[Claude Code MCP guide](https://code.claude.com/docs/en/mcp).
+
+The browser is optional on the Studio side. Figma extraction still requires
+access to the Figma document: the supported alpha path is its development plugin.
+The optional console driver needs a Figma editor session that actually exposes
+the `figma` global. Headless Chrome is not a tested install/export path and cannot
+create that API merely by opening the page. Figma's supported Plugin API runs
+inside its editor's plugin sandbox; see
+[How plugins run](https://developers.figma.com/docs/plugins/how-plugins-run/).
+
 ## Prepare a place
 
 1. Install Figlo and export a frame as described in [installation](install.md).
