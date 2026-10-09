@@ -40,4 +40,5 @@ with zipfile.ZipFile(out / f'Figlo-{version}-source.zip', 'a', zipfile.ZIP_DEFLA
 archive(out / f'Figlo-{version}-figma.zip', [(root / 'figma' / 'plugin' / f, f'Figlo/{f}') for f in ('code.js', 'manifest.json', 'ui.html')] + [(root / 'LICENSE', 'Figlo/LICENSE')])
 shutil.copyfile(root / 'build' / 'Figlo.rbxm', out / f'Figlo-{version}-studio.rbxm')
 shutil.copyfile(root / 'out' / 'figlo-page.min.js', out / f'Figlo-{version}-web.js')
+shutil.copyfile(root / 'LICENSE', out / 'LICENSE.txt')
 print('Packaged source, Figma plugin, Studio plugin and optional browser driver')

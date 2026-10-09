@@ -61,6 +61,11 @@ Local extractor/relay tests, Crisp assertions, importer behavioral checks, Luau
 compilation, release scans and plugin builds passed during preparation.
 The real-process relay check also passed: authenticated gzip CLI push, HTTP
 round trip, untrusted-origin rejection and explicit deletion over local sockets.
+All checks and builds also passed in a separate, fresh local Git checkout.
+The release source ZIP was compared byte-for-byte against its recorded commit;
+the archives and Git history contained no retired branding. SHA-256 checksums
+were verified for each distributable. Model inspection checks the compiled
+Studio plugin's module inventory and embedded script sources.
 
 Interactive Figma/Studio checks are **pending**. The Studio connector returned
 no connected instances, and the desktop/browser automation helpers failed to
